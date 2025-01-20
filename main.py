@@ -45,8 +45,9 @@ def user_pass(message):
     conn.close()
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(
-        'Посмотреть список пользователей', callback_data='show_users'))
+    if message.from_user.id == ALLOWED_USER_ID:
+        markup.add(types.InlineKeyboardButton(
+            'Посмотреть список пользователей', callback_data='show_users'))
     bot.send_message(
         message.chat.id, 'Ты успешно зарегистрировался', reply_markup=markup)
 
