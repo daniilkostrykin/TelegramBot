@@ -1,9 +1,78 @@
 import telebot
 import webbrowser
 from telebot import types
-
+import sqlite3
 # Создаем объект бота с указанным токеном
 bot = telebot.TeleBot('7616648953:AAEbzkEo7zmVe1QALD3flEe_mtru7xfNtns')
+name = ''
+ALLOWED_USER_ID = 1343087504 # Укажите свой id
+
+
+
+@bot.message_handler(commands=['start', 'main', 'hello'])
+def start(message):
+    conn = sqlite3.connect('kostrykin.db')
+    cur = conn.cursor()
+
+    cur.execute(
+        'CREATE TABLE IF NOT EXISTS users (id int auto_increment primary key, name varchar(50), password varchar(50))')
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+    bot.send_message(
+        message.chat.id, 'Привет! Я бот, который поможет тебе зарегистрироваться. Напиши свое имя')
+    bot.register_next_step_handler(message, user_name)
+
+
+def user_name(message):
+    global name
+    name = message.text.strip()
+    bot.send_message(message.chat.id, 'Бро, введи пароль')
+    bot.register_next_step_handler(message, user_pass)
+
+
+def user_pass(message):
+    password = message.text.strip()
+    conn = sqlite3.connect('kostrykin.db')
+    cur = conn.cursor()
+
+    cur.execute('INSERT INTO users (name, password) VALUES (?, ?)',
+                (name, password))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton(
+        'Посмотреть список пользователей', callback_data='show_users'))
+    bot.send_message(
+        message.chat.id, 'Ты успешно зарегистрировался', reply_markup=markup)
+
+    bot.register_next_step_handler(message, user_pass)
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback(call):
+    if call.data == 'show_users':
+        if call.from_user.id == ALLOWED_USER_ID:
+
+            conn = sqlite3.connect('kostrykin.db')
+            cur = conn.cursor()
+
+            cur.execute('SELECT * FROM users')
+            users = cur.fetchall()
+            conn.commit()
+            cur.close()
+            conn.close()
+            info = ''
+            info += 'Список пользователей:\n'
+            for user in users:
+                info += f'Имя: {user[1]}, Пароль: {user[2]}\n'
+            bot.send_message(call.message.chat.id, info)
+        else:
+                bot.send_message(call.message.chat.id, "У вас нет прав для просмотра списка пользователей.")
 
 
 @bot.message_handler(commands=['start', 'main', 'hello'])
@@ -14,9 +83,12 @@ def start(message):
     """
     # Создаем клавиатуру с кнопками
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    site_button = types.KeyboardButton('Перейти на сайт')  # Кнопка для перехода на сайт
-    delete_button = types.KeyboardButton('Удалить фото')   # Кнопка для удаления фото
-    edit_button = types.KeyboardButton('Редактировать фото')  # Кнопка для редактирования фото
+    site_button = types.KeyboardButton(
+        'Перейти на сай')  # Кнопка для перехода на сайт
+    delete_button = types.KeyboardButton(
+        'Удалить фото')   # Кнопка для удаления фото
+    # Кнопка для редактирования фото
+    edit_button = types.KeyboardButton('Редактировать фото')
     markup.row(site_button)  # Добавляем кнопку в одну строку
     markup.add(edit_button, delete_button)  # Добавляем остальные кнопки
 
@@ -26,7 +98,8 @@ def start(message):
     # Отправляем фото, если файл доступен
     try:
         with open('./image.png', 'rb') as file:  # Открываем файл изображения в бинарном режиме
-            bot.send_photo(message.chat.id, file)  # Отправляем фото пользователю
+            # Отправляем фото пользователю
+            bot.send_photo(message.chat.id, file)
     except FileNotFoundError:  # Обрабатываем случай, если файл не найден
         bot.send_message(message.chat.id, 'Файл с изображением не найден.')
 
@@ -46,7 +119,8 @@ def on_click(message):
         bot.send_message(message.chat.id, 'Фото удалено')
     elif message.text == 'Редактировать фото':
         # Уведомляем, что функция редактирования пока недоступна
-        bot.send_message(message.chat.id, 'Редактирование фото пока не доступно.')
+        bot.send_message(
+            message.chat.id, 'Редактирование фото пока не доступно.')
 
 
 @bot.message_handler(content_types=['photo'])
@@ -57,11 +131,15 @@ def get_photo(message):
     """
     # Создаем инлайн-клавиатуру с кнопками
     markup = types.InlineKeyboardMarkup()
-    site_button = types.InlineKeyboardButton('Перейти на сайт', url='https://github.com/daniilkostrykin?tab=repositories')  # Кнопка для перехода на сайт
-    delete_button = types.InlineKeyboardButton('Удалить фото', callback_data='delete')  # Кнопка для удаления фото
-    edit_button = types.InlineKeyboardButton('Редактировать фото', callback_data='edit')  # Кнопка для редактирования фото
+    site_button = types.InlineKeyboardButton(
+        'Перейти на сайт', url='https://github.com/daniilkostrykin?tab=repositories')  # Кнопка для перехода на сайт
+    delete_button = types.InlineKeyboardButton(
+        'Удалить фото', callback_data='delete')  # Кнопка для удаления фото
+    edit_button = types.InlineKeyboardButton(
+        'Редактировать фото', callback_data='edit')  # Кнопка для редактирования фото
     markup.add(site_button)  # Добавляем кнопку для сайта
-    markup.add(edit_button, delete_button)  # Добавляем кнопки для редактирования и удаления
+    # Добавляем кнопки для редактирования и удаления
+    markup.add(edit_button, delete_button)
 
     # Отправляем сообщение с инлайн-клавиатурой
     bot.reply_to(message, 'Красивая фотка!', reply_markup=markup)
@@ -75,10 +153,12 @@ def callback_message(callback):
     """
     if callback.data == 'edit':
         # Изменяем текст сообщения
-        bot.edit_message_text('Edit text', callback.message.chat.id, callback.message.message_id)
+        bot.edit_message_text(
+            'Edit text', callback.message.chat.id, callback.message.message_id)
     elif callback.data == 'delete':
         # Удаляем сообщение
-        bot.delete_message(callback.message.chat.id, callback.message.message_id)
+        bot.delete_message(callback.message.chat.id,
+                           callback.message.message_id)
 
 
 @bot.message_handler(commands=['help'])
@@ -87,7 +167,8 @@ def help_command(message):
     Обработчик команды /help.
     Отправляет сообщение с текстом помощи.
     """
-    bot.send_message(message.chat.id, 'Такому самостоятельному человеку, как ты, не нужна помощь')
+    bot.send_message(
+        message.chat.id, 'Такому самостоятельному человеку, как ты, не нужна помощь')
 
 
 @bot.message_handler()
@@ -98,7 +179,8 @@ def info(message):
     """
     if message.text.lower() == 'привет':
         # Отвечаем приветствием
-        bot.send_message(message.chat.id, f'Привет, {message.from_user.first_name}')
+        bot.send_message(
+            message.chat.id, f'Привет, {message.from_user.first_name}')
     elif message.text.lower() == 'id':
         # Отправляем ID пользователя
         bot.reply_to(message, f'ID: {message.from_user.id}')
