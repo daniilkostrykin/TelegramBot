@@ -3,13 +3,8 @@ import webbrowser
 from telebot import types
 import subprocess
 import config
-import logging  # Импортируем модуль logging
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.by import By
-# Для новых версий Selenium
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+import logging
+from fuzzywuzzy import process  # Библиотека для поиска ближайшего совпадения
 
 # Настраиваем логирование
 logging.basicConfig(
@@ -17,6 +12,33 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
+
+# Словарь популярных сайтов России
+popular_sites = {
+    "вк": "https://vk.com",
+    "одноклассники": "https://ok.ru",
+    "яндекс": "https://yandex.ru",
+    "гугл": "https://google.com",
+    "мейл": "https://mail.ru",
+    "ютуб": "https://youtube.com",
+    "твиттер": "https://twitter.com",
+    "инстаграм": "https://instagram.com",
+    "тг": "https://web.telegram.org",
+    "авито": "https://avito.ru",
+    "цукерберг позвонит": "https://dtf.ru",
+    "хабр": "https://habr.com",
+    "музыка": "https://music.yandex.ru",
+    "карты": "https://yandex.ru/maps",
+    "госуслуги": "https://www.gosuslugi.ru"
+}
+
+
+def get_closest_site(query):
+    """Функция для поиска наиболее близкого сайта по названию."""
+    closest_match, score = process.extractOne(query, popular_sites.keys())
+    if score > 70:  # Порог совпадения
+        return popular_sites[closest_match]
+    return None
 
 
 @bot.message_handler(commands=['start'])
@@ -60,26 +82,29 @@ def restart(message):
         bot.send_message(message.chat.id, 'Произошла ошибка')
 
 
-@bot.message_handler(func=lambda message: message.text == 'Открыть сайт')
-def open_site(message):
+# Обработчик для всех текстовых сообщений
+@bot.message_handler(func=lambda message: True)
+def handle_text_message(message):
+    query = message.text.strip().lower()
     try:
-        bot.send_message(message.chat.id, 'Какой сайт открыть?')
-        bot.register_next_step_handler(message, fetch_site_content)
+        # Ищем наиболее близкий сайт
+        closest_site = get_closest_site(query)
+        if closest_site:
+            bot.send_message(message.chat.id, f'Открываю {closest_site}')
+            webbrowser.open(closest_site)
+        else:
+            # Если сайт не найден, выполняем поиск
+            bot.send_message(
+                message.chat.id, f'Не нашёл сайт "{query}" в списке популярных. Попробую поискать в Яндексе.')
+            search_url = f"https://yandex.ru/search/?text={query}"
+            bot.send_message(message.chat.id, f'Ищу по запросу: {search_url}')
+            webbrowser.open(search_url)
     except Exception as e:
-        logger.error(f"Error in open_site command: {e}")
+        logger.error(f"Error while handling message: {e}")
         bot.send_message(message.chat.id, 'Произошла ошибка')
 
-def fetch_site_content(message):
-    query = message.text
-    try:
-        url = f"https://yandex.ru/search/?text={query}"
-        bot.send_message(message.chat.id, f'Ищу "{query}"... вот ссылка: {url}')
-        webbrowser.open(url)
-    except Exception as e:
-        logger.error(f"Error while fetching site: {e}")
-        bot.send_message(message.chat.id, 'Ошибка при запросе к сайту')
 
-
+# Запуск бота
 try:
     bot.polling(none_stop=True)
 except Exception as e:
