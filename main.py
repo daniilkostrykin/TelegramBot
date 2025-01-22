@@ -2,10 +2,10 @@ import telebot
 import webbrowser
 from telebot import types
 import sqlite3
+import config
 # Создаем объект бота с указанным токеном
-bot = telebot.TeleBot('7616648953:AAEbzkEo7zmVe1QALD3flEe_mtru7xfNtns')
+bot = telebot.TeleBot(config.BOT_TOKEN)
 name = ''
-ALLOWED_USER_ID = 1343087504 # Укажите свой id
 
 
 
@@ -45,7 +45,7 @@ def user_pass(message):
     conn.close()
 
     markup = types.InlineKeyboardMarkup()
-    if message.from_user.id == ALLOWED_USER_ID:
+    if message.from_user.id == config.ALLOWED_USER_ID:
         markup.add(types.InlineKeyboardButton(
             'Посмотреть список пользователей', callback_data='show_users'))
     bot.send_message(
@@ -57,7 +57,7 @@ def user_pass(message):
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
     if call.data == 'show_users':
-        if call.from_user.id == ALLOWED_USER_ID:
+        if call.from_user.id == config.ALLOWED_USER_ID:
 
             conn = sqlite3.connect('kostrykin.db')
             cur = conn.cursor()
