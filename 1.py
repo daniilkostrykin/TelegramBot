@@ -1,3 +1,4 @@
+import pyautogui
 from telebot import types  # Импортируем правильный тип из telebot
 import telebot
 import webbrowser
@@ -59,13 +60,61 @@ def start(message):
 
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    video_button = types.KeyboardButton('Видео')
+    computer_button = types.KeyboardButton('Компьютер')
+    markup.row(video_button, computer_button)
+    return markup
+
+
+@bot.message_handler(func=lambda message: message.text == 'Назад')
+def back(message):
+    bot.send_message(message.chat.id, "Назад",
+                     reply_markup=get_main_keyboard())
+
+
+@bot.message_handler(func=lambda message: message.text == 'Видео')
+def handle_video(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    pause_button = types.KeyboardButton('⏯️ Пауза / ⏸️ Воспроизведение')
+    fast_forward = types.KeyboardButton('▶️ Перемотать вперед')
+    fast_backward = types.KeyboardButton('◀️ Перемотать назад')
+
+    back_button = types.KeyboardButton('Назад')
+
+    markup.row(pause_button)
+    markup.row(fast_backward, fast_forward)
+    markup.add(back_button)
+    bot.send_message(message.chat.id, "Управление видео:", reply_markup=markup)
+
+
+@bot.message_handler(func=lambda message: message.text == 'Компьютер')
+def handle_computer(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     off_button = types.KeyboardButton('Выключить компьютер')
     restart_button = types.KeyboardButton('Перезагрузить компьютер')
     open_site_button = types.KeyboardButton('Открыть сайт')
     full_screen_button = types.KeyboardButton('Развернуть окно на весь экран')
+    back_button = types.KeyboardButton('Назад')  # Добавлена кнопка "Назад"
     markup.add(off_button, restart_button)
     markup.add(open_site_button, full_screen_button)
-    return markup
+    markup.add(back_button)
+    bot.send_message(
+        message.chat.id, "Управление компьютером:", reply_markup=markup)
+
+
+@bot.message_handler(func=lambda message: message.text == '⏯️ Пауза / ⏸️ Воспроизведение')
+def video_pause(message):
+    pyautogui.press('space')
+
+
+@bot.message_handler(func=lambda message: message.text == '▶️ Перемотать вперед')
+def fast_forward(message):
+    pyautogui.press('right')
+
+
+@bot.message_handler(func=lambda message: message.text == '◀️ Перемотать назад')
+def fast_backward(message):
+    pyautogui.press('left')
 
 
 def get_closest_site(query):
@@ -235,4 +284,3 @@ try:
     bot.polling(none_stop=True)
 except Exception as e:
     logger.critical(f"Polling stopped due to error: {e}")
- 
