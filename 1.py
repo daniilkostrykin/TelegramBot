@@ -9,7 +9,8 @@ import os
 from pywinauto import Application, findwindows
 from fuzzywuzzy import process
 from pywinauto import Application, findwindows
-
+import pygetwindow as gw
+gender = 'сэр'
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,6 +47,12 @@ translations = {
     "блокнот": "C:\\Windows\\System32\\notepad.exe",
     "зона": "C:\\Users\\Daniil\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Zona.lnk",
 }
+
+
+def send_message_with_gender(chat_id, text, **kwargs):
+    """Отправляет сообщение с добавлением 'сэр' в конце."""
+    bot.send_message(chat_id, f"{text} {gender}", **kwargs)
+
 
 
 @bot.message_handler(commands=['start'])
@@ -93,8 +100,8 @@ def handle_computer(message):
     off_button = types.KeyboardButton('Выключить компьютер')
     restart_button = types.KeyboardButton('Перезагрузить компьютер')
     open_site_button = types.KeyboardButton('Открыть сайт')
-    full_screen_button = types.KeyboardButton('Развернуть окно на весь экран')
-    back_button = types.KeyboardButton('Назад')  # Добавлена кнопка "Назад"
+    full_screen_button = types.KeyboardButton('📺 На весь экран')
+    back_button = types.KeyboardButton('Назад') 
     markup.add(off_button, restart_button)
     markup.add(open_site_button, full_screen_button)
     markup.add(back_button)
@@ -123,6 +130,23 @@ def get_closest_site(query):
     if score > 70:
         return popular_sites[closest_match]
     return None
+
+
+
+@bot.message_handler(func=lambda message: message.text == '📺 На весь экран')
+def fullscreen(message):
+    bot.send_message(message.chat.id, 'Открываю текущее приложение на весь экран.')
+
+    
+
+    # Получить текущее активное окно
+    active_window = gw.getActiveWindow()
+    if active_window:
+        active_window.maximize()
+    else:
+        print("Нет активного окна")
+
+
 
 
 def get_closest_app(query):
