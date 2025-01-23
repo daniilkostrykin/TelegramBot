@@ -10,7 +10,6 @@ from pywinauto import Application, findwindows
 from fuzzywuzzy import process
 from pywinauto import Application, findwindows
 import pygetwindow as gw
-gender = 'сэр'
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,12 +46,6 @@ translations = {
     "блокнот": "C:\\Windows\\System32\\notepad.exe",
     "зона": "C:\\Users\\Daniil\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Zona.lnk",
 }
-
-
-def send_message_with_gender(chat_id, text, **kwargs):
-    """Отправляет сообщение с добавлением 'сэр' в конце."""
-    bot.send_message(chat_id, f"{text} {gender}", **kwargs)
-
 
 
 @bot.message_handler(commands=['start'])
