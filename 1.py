@@ -7,7 +7,6 @@ import subprocess
 import config
 import logging
 import os
-from pywinauto import Application, findwindows
 from fuzzywuzzy import process
 from pywinauto import Application, findwindows
 import pygetwindow as gw
@@ -132,55 +131,40 @@ def handle_mouse(message):
 
 @bot.message_handler(func=lambda message: message.text == 'Громкость')
 def volume(message):
-    """Функция для отображения клавиатуры управления громкостью."""
+    """Отображает клавиатуру управления громкостью."""
     update_volume_keyboard(message)
 
 def update_volume_keyboard(message):
     """Обновляет клавиатуру в зависимости от состояния звука."""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    if is_muted():
-        mute_button = types.KeyboardButton('🔊 Включить звук')
-    else:
-        mute_button = types.KeyboardButton('🔇 Выключить звук')
+    mute_button = types.KeyboardButton('🔊 Включить звук' if is_muted() else '🔇 Выключить звук')
     up_button = types.KeyboardButton('🔊 Повысить громкость')
     down_button = types.KeyboardButton('🔉 Понизить громкость')
     back_button = types.KeyboardButton('Назад')
     markup.add(mute_button)
     markup.add(up_button, down_button)
     markup.add(back_button)
-    bot.send_message(
-        message.chat.id, "Управление громкостью", reply_markup=markup
-    )
+    bot.send_message(message.chat.id, "Управление громкостью", reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text == '🔇 Выключить звук')
-def handle_mute(message):
-    """Обработчик для кнопки выключения звука."""
-    mute_volume()
-    bot.send_message(message.chat.id, "Звук выключен.")
+@bot.message_handler(func=lambda message: message.text in ['🔇 Выключить звук', '🔊 Включить звук', '🔊 Повысить громкость', '🔉 Понизить громкость'])
+def handle_volume_controls(message):
+    """Обрабатывает управление громкостью."""
+    action = message.text
+    if action == '🔇 Выключить звук':
+        mute_volume()
+        response = "Звук выключен."
+    elif action == '🔊 Включить звук':
+        unmute_volume()
+        response = "Звук включен."
+    elif action == '🔊 Повысить громкость':
+        increase_volume(message=message)
+        return 
+    elif action == '🔉 Понизить громкость':
+        decrease_volume(message=message)
+        return 
+
+    bot.send_message(message.chat.id, response)
     update_volume_keyboard(message)
-
-@bot.message_handler(func=lambda message: message.text == '🔊 Включить звук')
-def handle_unmute(message):
-    """Обработчик для кнопки включения звука."""
-    unmute_volume()
-    bot.send_message(message.chat.id, "Звук включен.")
-    update_volume_keyboard(message)
-
-@bot.message_handler(func=lambda message: message.text == '🔊 Повысить громкость')
-def handle_increase_volume(message):
-    """Обработчик для кнопки увеличения громкости."""
-    increase_volume(message=message)
-
-@bot.message_handler(func=lambda message: message.text == '🔉 Понизить громкость')
-def handle_decrease_volume(message):
-    """Обработчик для кнопки уменьшения громкости."""
-    decrease_volume(message=message)
-
-@bot.message_handler(func=lambda message: message.text == 'Назад')
-def handle_back(message):
-    """Обработчик для кнопки 'Назад'."""
-    bot.send_message(message.chat.id, "Возврат в главное меню.")
-    # Здесь вы можете вернуть пользователя в главное меню.
 
 def get_audio_endpoint():
     """Получает основной аудио-интерфейс."""
@@ -189,30 +173,25 @@ def get_audio_endpoint():
     volume = cast(interface, POINTER(IAudioEndpointVolume))
     return volume
 
-
 def is_muted():
     """Проверяет, выключен ли звук."""
     volume = get_audio_endpoint()
     return volume.GetMute()
-
 
 def set_volume(volume_level):
     """Устанавливает уровень громкости (от 0 до 1)."""
     volume = get_audio_endpoint()
     volume.SetMasterVolumeLevelScalar(volume_level, None)
 
-
 def mute_volume():
     """Выключает звук."""
     volume = get_audio_endpoint()
     volume.SetMute(1, None)
 
-
 def unmute_volume():
     """Включает звук."""
     volume = get_audio_endpoint()
     volume.SetMute(0, None)
-
 
 def increase_volume(increment=0.1, message=None):
     """Увеличивает громкость на указанную величину и отправляет сообщение."""
@@ -224,7 +203,6 @@ def increase_volume(increment=0.1, message=None):
     bot.send_message(
         message.chat.id, f'Громкость повышена. Текущая громкость: {current_volume_percent}%')
 
-
 def decrease_volume(decrement=0.1, message=None):
     """Уменьшает громкость на указанную величину и отправляет сообщение."""
     volume = get_audio_endpoint()
@@ -234,23 +212,6 @@ def decrease_volume(decrement=0.1, message=None):
     current_volume_percent = int(new_volume * 100)
     bot.send_message(
         message.chat.id, f'Громкость понижена. Текущая громкость: {current_volume_percent}%')
-
-
-@bot.message_handler(func=lambda message: message.text in ['🔇 Выключить звук', '🔊 Повысить громкость', '🔉 Понизить громкость', '🔊 Включить звук'])
-def handle_volume_controls(message):
-    """Обрабатывает управление громкостью: выключение, повышение и понижение."""
-    action = message.text
-    if action == '🔇 Выключить звук':
-        mute_volume()
-        bot.send_message(message.chat.id, "Звук выключен.")
-    elif action == '🔊 Включить звук':
-        unmute_volume()
-        bot.send_message(message.chat.id, "Звук включен.")
-    elif action == '🔊 Повысить громкость':
-        increase_volume(message=message)
-    elif action == '🔉 Понизить громкость':
-        decrease_volume(message=message)
-    bot.delete_message(message.chat.id, message.message_id)
 
 
 def get_closest_site(query):
