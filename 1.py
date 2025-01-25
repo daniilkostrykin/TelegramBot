@@ -12,7 +12,7 @@ from fuzzywuzzy import process
 from pywinauto import Application, findwindows
 import pygetwindow as gw
 import shlex
-
+from config import POPULAR_SITES, TRANSLATIONS
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -20,37 +20,6 @@ logger = logging.getLogger(__name__)
 bot = telebot.TeleBot(config.BOT_TOKEN)
 
 
-# Выносим константы в config (нужно будет обновить config.py)
-POPULAR_SITES = {
-    "вк": "https://vk.com",
-    "одноклассники": "https://ok.ru",
-    "яндекс": "https://yandex.ru",
-    "гугл": "https://google.com",
-    "мейл": "https://mail.ru",
-    "ютуб": "https://youtube.com",
-    "твиттер": "https://twitter.com",
-    "инстаграм": "https://instagram.com",
-    "тг": "https://web.telegram.org",
-    "авито": "https://avito.ru",
-    "цукерберг позвонит": "https://dtf.ru",
-    "хабр": "https://habr.com",
-    "музыка": "https://music.yandex.ru",
-    "карты": "https://yandex.ru/maps",
-    "госуслуги": "https://www.gosuslugi.ru"
-}
-
-TRANSLATIONS = {
-    "рабочий стол": os.path.join(os.path.expanduser("~"), "Desktop"),
-    "загрузки": os.path.join(os.path.expanduser("~"), "Downloads"),
-    "документы": os.path.join(os.path.expanduser("~"), "Documents"),
-    "изображения": os.path.join(os.path.expanduser("~"), "Pictures"),
-    "видео": os.path.join(os.path.expanduser("~"), "Videos"),
-    "telegram": "C:\\Users\\Daniil\\Downloads\\Telegram Desktop\\AyuGram\\AyuGram.exe",
-    "телеграм": "C:\\Users\\Daniil\\Downloads\\Telegram Desktop\\AyuGram\\AyuGram.exe",
-    "браузер": "C:\\Users\\Daniil\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Yandex.lnk",
-    "блокнот": "C:\\Windows\\System32\\notepad.exe",
-    "зона": "C:\\Users\\Daniil\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Zona.lnk",
-}
 
 
 def get_main_keyboard():
