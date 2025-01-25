@@ -52,9 +52,9 @@ def start(message):
         bot.send_message(message.chat.id, 'Произошла ошибка')
 
 
-@bot.message_handler(func=lambda message: message.text == 'Назад')
+@bot.message_handler(func=lambda message: message.text == '⬅️ Назад')
 def back(message):
-    bot.send_message(message.chat.id, "Назад",
+    bot.send_message(message.chat.id, "⬅️ Назад",
                      reply_markup=get_main_keyboard())
     bot.delete_message(message.chat.id, message.message_id)
 
@@ -66,7 +66,7 @@ def handle_video(message):
     fast_forward = types.KeyboardButton('▶️ Перемотать вперед')
     fast_backward = types.KeyboardButton('◀️ Перемотать назад')
 
-    back_button = types.KeyboardButton('Назад')
+    back_button = types.KeyboardButton('⬅️ Назад')
 
     markup.row(pause_button)
     markup.row(fast_backward, fast_forward)
@@ -77,13 +77,13 @@ def handle_video(message):
 @bot.message_handler(func=lambda message: message.text == 'Компьютер')
 def handle_computer(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    off_button = types.KeyboardButton('Выключить компьютер')
-    restart_button = types.KeyboardButton('Перезагрузить компьютер')
-    open_site_button = types.KeyboardButton('Открыть сайт')
+    off_button = types.KeyboardButton('❌ Выключить компьютер')
+    restart_button = types.KeyboardButton('🔄 Перезагрузить компьютер')
+    open_site_button = types.KeyboardButton('🌐 Открыть сайт')
     full_screen_button = types.KeyboardButton('📺 На весь экран')
-    mouse_button = types.KeyboardButton('Мышь')
-    volume_button = types.KeyboardButton('Громкость')
-    back_button = types.KeyboardButton('Назад')
+    mouse_button = types.KeyboardButton('🖱️ Мышь')
+    volume_button = types.KeyboardButton('🔊 Громкость')
+    back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(off_button, restart_button)
     markup.add(open_site_button, full_screen_button,
                mouse_button, volume_button)
@@ -105,12 +105,12 @@ def handle_video_controls(message):
     bot.delete_message(message.chat.id, message.message_id)
 
 
-@bot.message_handler(func=lambda message: message.text == 'Мышь')
+@bot.message_handler(func=lambda message: message.text == '🖱️ Мышь')
 def mouse(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     left_button = types.KeyboardButton('Лево')
     right_button = types.KeyboardButton('Право')
-    back_button = types.KeyboardButton('Назад')
+    back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(left_button, right_button)
     markup.add(back_button)
     bot.delete_message(message.chat.id, message.message_id)
@@ -129,22 +129,26 @@ def handle_mouse(message):
         bot.delete_message(message.chat.id, message.message_id)
 
 
-@bot.message_handler(func=lambda message: message.text == 'Громкость')
+@bot.message_handler(func=lambda message: message.text == '🔊 Громкость')
 def volume(message):
     """Отображает клавиатуру управления громкостью."""
     update_volume_keyboard(message)
 
+
 def update_volume_keyboard(message):
     """Обновляет клавиатуру в зависимости от состояния звука."""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    mute_button = types.KeyboardButton('🔊 Включить звук' if is_muted() else '🔇 Выключить звук')
+    mute_button = types.KeyboardButton(
+        '🔊 Включить звук' if is_muted() else '🔇 Выключить звук')
     up_button = types.KeyboardButton('🔊 Повысить громкость')
     down_button = types.KeyboardButton('🔉 Понизить громкость')
-    back_button = types.KeyboardButton('Назад')
+    back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(mute_button)
     markup.add(up_button, down_button)
     markup.add(back_button)
-    bot.send_message(message.chat.id, "Управление громкостью", reply_markup=markup)
+    bot.send_message(message.chat.id, "Управление громкостью",
+                     reply_markup=markup)
+
 
 @bot.message_handler(func=lambda message: message.text in ['🔇 Выключить звук', '🔊 Включить звук', '🔊 Повысить громкость', '🔉 Понизить громкость'])
 def handle_volume_controls(message):
@@ -158,13 +162,14 @@ def handle_volume_controls(message):
         response = "Звук включен."
     elif action == '🔊 Повысить громкость':
         increase_volume(message=message)
-        return 
+        return
     elif action == '🔉 Понизить громкость':
         decrease_volume(message=message)
-        return 
+        return
 
     bot.send_message(message.chat.id, response)
     update_volume_keyboard(message)
+
 
 def get_audio_endpoint():
     """Получает основной аудио-интерфейс."""
@@ -173,25 +178,30 @@ def get_audio_endpoint():
     volume = cast(interface, POINTER(IAudioEndpointVolume))
     return volume
 
+
 def is_muted():
     """Проверяет, выключен ли звук."""
     volume = get_audio_endpoint()
     return volume.GetMute()
+
 
 def set_volume(volume_level):
     """Устанавливает уровень громкости (от 0 до 1)."""
     volume = get_audio_endpoint()
     volume.SetMasterVolumeLevelScalar(volume_level, None)
 
+
 def mute_volume():
     """Выключает звук."""
     volume = get_audio_endpoint()
     volume.SetMute(1, None)
 
+
 def unmute_volume():
     """Включает звук."""
     volume = get_audio_endpoint()
     volume.SetMute(0, None)
+
 
 def increase_volume(increment=0.1, message=None):
     """Увеличивает громкость на указанную величину и отправляет сообщение."""
@@ -202,6 +212,7 @@ def increase_volume(increment=0.1, message=None):
     current_volume_percent = int(new_volume * 100)
     bot.send_message(
         message.chat.id, f'Громкость повышена. Текущая громкость: {current_volume_percent}%')
+
 
 def decrease_volume(decrement=0.1, message=None):
     """Уменьшает громкость на указанную величину и отправляет сообщение."""
@@ -256,7 +267,7 @@ def open_application(query):
     """Открывает приложение или папку по указанной команде."""
     query = query.lower().strip()
     print(f"Команда в open_application: {query}")
-    closest_app = get_closest_app(query)  # Найти ближайшее приложение
+    closest_app = get_closest_app(query)
     if closest_app:
         if os.path.exists(closest_app):
             if closest_app.endswith(".exe"):
@@ -269,7 +280,7 @@ def open_application(query):
                     return False
             elif closest_app.endswith(".lnk"):
                 return open_file(closest_app)
-            else:  # Если это папка
+            else:
                 return open_file(closest_app)
 
         else:
@@ -307,7 +318,7 @@ def handle_shutdown_restart_choice(message, action):
                          reply_markup=get_main_keyboard())
 
 
-@bot.message_handler(func=lambda message: message.text == 'Выключить компьютер')
+@bot.message_handler(func=lambda message: message.text == '❌ Выключить компьютер')
 def shutdown(message):
     try:
         markup = types.ReplyKeyboardMarkup(
@@ -323,7 +334,7 @@ def shutdown(message):
         bot.send_message(message.chat.id, 'Произошла ошибка')
 
 
-@bot.message_handler(func=lambda message: message.text == 'Перезагрузить компьютер')
+@bot.message_handler(func=lambda message: message.text == '🔄 Перезагрузить компьютер')
 def restart(message):
     try:
         markup = types.ReplyKeyboardMarkup(
@@ -342,7 +353,7 @@ def restart(message):
         bot.send_message(message.chat.id, 'Произошла ошибка')
 
 
-@bot.message_handler(func=lambda message: message.text == 'Открыть сайт')
+@bot.message_handler(func=lambda message: message.text == '🌐 Открыть сайт')
 def open_site_handler(message):
     """Обработчик нажатия на кнопку 'Открыть сайт'. Запрашивает у пользователя название."""
     bot.send_message(message.chat.id, 'Введите название сайта или приложения.')
@@ -360,15 +371,15 @@ def handle_site_or_app_input(message):
         closest_site = get_closest_site(query)
         closest_app = get_closest_app(query)
 
-        if closest_app:  # Если нашли приложение
+        if closest_app:
             if open_application(query):
                 bot.send_message(message.chat.id, "Открываю приложение...")
             else:
                 bot.send_message(
                     message.chat.id, f'Не удалось открыть приложение "{query}".')
-        elif closest_site:  # Если нашли сайт
+        elif closest_site:
             open_webpage(closest_site, message.chat.id)
-        else:  # Если не нашли ни приложение, ни сайт
+        else:
             bot.send_message(
                 message.chat.id, f'Не нашёл сайт "{query}" в списке популярных. Ищу в Яндексе.')
             search_url = f"https://yandex.ru/search/?text={query}"
