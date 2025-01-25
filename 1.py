@@ -15,13 +15,13 @@ from config import POPULAR_SITES, TRANSLATIONS
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from ctypes import cast, POINTER
 from comtypes import CLSCTX_ALL
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
-
 
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -79,12 +79,17 @@ def handle_computer(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     off_button = types.KeyboardButton('❌ Выключить компьютер')
     restart_button = types.KeyboardButton('🔄 Перезагрузить компьютер')
+    chrome_button = KeyboardButton(
+        text='🌐 Управление компьютером',
+        web_app=WebAppInfo(url='https://remotedesktop.google.com/access/')
+    )
     open_site_button = types.KeyboardButton('🌐 Открыть сайт')
     full_screen_button = types.KeyboardButton('📺 На весь экран')
     mouse_button = types.KeyboardButton('🖱️ Мышь')
     volume_button = types.KeyboardButton('🔊 Громкость')
     back_button = types.KeyboardButton('⬅️ Назад')
-    markup.add(off_button, restart_button)
+    markup.add(off_button, restart_button, chrome_button)
+
     markup.add(open_site_button, full_screen_button,
                mouse_button, volume_button)
     markup.add(back_button)
@@ -359,6 +364,44 @@ def open_site_handler(message):
     bot.send_message(message.chat.id, 'Введите название сайта или приложения.')
     bot.register_next_step_handler(message, handle_site_or_app_input)
 
+def open_link(command, task_name=None):
+    """Открывает ссылку по указанной команде и запускает задачу, если указано."""
+    command = command.lower().strip()
+    for key, url in POPULAR_SITES.items():
+        if key in command:
+            # Если указано задание в планировщике задач
+            if task_name:
+                if not run_task(task_name):
+                    return False
+                print(f"Запускаю задачу: {task_name}")
+            # Открытие ссылки
+            try:
+                webbrowser.open(url)
+                print(f"Открываю ссылку: {url}")
+                return True
+            except Exception as e:
+                print(f"Ошибка при открытии ссылки {key}: {e}")
+                return False
+    print(f"Ссылка для команды '{command}' не найдена.")
+    return False
+def run_task(task_name):
+    """Запускает задачу из Планировщика задач."""
+    try:
+        result = subprocess.run(
+            ["schtasks", "/run", "/tn", task_name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.returncode == 0:
+            print(f"Задача '{task_name}' успешно запущена.")
+            return True
+        else:
+            print(f"Ошибка при запуске задачи '{task_name}': {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"Ошибка выполнения: {e}")
+        return False
 
 def handle_site_or_app_input(message):
     """Обрабатывает ввод пользователя после нажатия на кнопку 'Открыть сайт'."""
@@ -371,7 +414,13 @@ def handle_site_or_app_input(message):
         closest_site = get_closest_site(query)
         closest_app = get_closest_app(query)
 
-        if closest_app:
+        if "youtube" in query or "ютуб" in query:  # Проверка на youtube (регистронезависимо)
+            task_name = "RunAppAsAdmin"  # Имя задачи в Планировщике задач
+            if open_link(query, task_name=task_name):
+                return # Завершаем функцию, если все успешно
+            else:
+                bot.send_message(message.chat.id, "Не удалось запустить YouTube через задачу планировщика.")
+        if closest_app:           
             if open_application(query):
                 bot.send_message(message.chat.id, "Открываю приложение...")
             else:
