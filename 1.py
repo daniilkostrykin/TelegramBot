@@ -1,5 +1,6 @@
+import time
 import pyautogui
-from telebot import types  # Импортируем правильный тип из telebot
+from telebot import types
 import telebot
 import webbrowser
 import subprocess
@@ -70,6 +71,7 @@ def get_main_keyboard():
 def back(message):
     bot.send_message(message.chat.id, "Назад",
                      reply_markup=get_main_keyboard())
+    bot.delete_message(message.chat.id, message.message_id)
 
 
 @bot.message_handler(func=lambda message: message.text == 'Видео')
@@ -84,7 +86,7 @@ def handle_video(message):
     markup.row(pause_button)
     markup.row(fast_backward, fast_forward)
     markup.add(back_button)
-    bot.send_message(message.chat.id, "Управление видео:", reply_markup=markup)
+    bot.send_message(message.chat.id, "Управление видео", reply_markup=markup)
 
 
 @bot.message_handler(func=lambda message: message.text == 'Компьютер')
@@ -94,27 +96,55 @@ def handle_computer(message):
     restart_button = types.KeyboardButton('Перезагрузить компьютер')
     open_site_button = types.KeyboardButton('Открыть сайт')
     full_screen_button = types.KeyboardButton('📺 На весь экран')
-    back_button = types.KeyboardButton('Назад') 
+    mouse_button = types.KeyboardButton('Мышь')
+    back_button = types.KeyboardButton('Назад')
     markup.add(off_button, restart_button)
-    markup.add(open_site_button, full_screen_button)
+    markup.add(open_site_button, full_screen_button, mouse_button)
     markup.add(back_button)
     bot.send_message(
-        message.chat.id, "Управление компьютером:", reply_markup=markup)
+        message.chat.id, "Управление компьютером", reply_markup=markup)
 
 
 @bot.message_handler(func=lambda message: message.text == '⏯️ Пауза / ⏸️ Воспроизведение')
 def video_pause(message):
     pyautogui.press('space')
+    bot.delete_message(message.chat.id, message.message_id)
 
 
 @bot.message_handler(func=lambda message: message.text == '▶️ Перемотать вперед')
 def fast_forward(message):
     pyautogui.press('right')
+    bot.delete_message(message.chat.id, message.message_id)
 
 
 @bot.message_handler(func=lambda message: message.text == '◀️ Перемотать назад')
 def fast_backward(message):
     pyautogui.press('left')
+    bot.delete_message(message.chat.id, message.message_id)
+
+
+@bot.message_handler(func=lambda message: message.text == 'Мышь')
+def mouse(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    left_button = types.KeyboardButton('Лево')
+    right_button = types.KeyboardButton('Право')
+    back_button = types.KeyboardButton('Назад')
+    markup.add(left_button, right_button)
+    markup.add(back_button)
+    bot.delete_message(message.chat.id, message.message_id)
+
+    msg = bot.send_message(
+        message.chat.id, "Управление мышью", reply_markup=markup)
+
+
+@bot.message_handler(func=lambda message: message.text in ['Лево', 'Право'])
+def handle_mouse(message):
+    if message.text == 'Лево':
+        pyautogui.click(button='left')
+        bot.delete_message(message.chat.id, message.message_id)
+    elif message.text == 'Право':
+        pyautogui.click(button='right')
+        bot.delete_message(message.chat.id, message.message_id)
 
 
 def get_closest_site(query):
@@ -125,21 +155,15 @@ def get_closest_site(query):
     return None
 
 
-
 @bot.message_handler(func=lambda message: message.text == '📺 На весь экран')
 def fullscreen(message):
-    bot.send_message(message.chat.id, 'Открываю текущее приложение на весь экран.')
-
-    
-
-    # Получить текущее активное окно
+    bot.send_message(
+        message.chat.id, 'Открываю текущее приложение на весь экран.')
     active_window = gw.getActiveWindow()
     if active_window:
         active_window.maximize()
     else:
         print("Нет активного окна")
-
-
 
 
 def get_closest_app(query):
@@ -211,7 +235,7 @@ def handle_shutdown_choice(message):
         else:
             bot.send_message(
                 message.chat.id, 'Пожалуйста, выберите "Да" или "Нет".')
-        bot.send_message(message.chat.id, 'Вернулся к основному меню',
+        bot.send_message(message.chat.id, 'Выбор принят',
                          reply_markup=get_main_keyboard())
 
     except subprocess.CalledProcessError as e:
@@ -251,7 +275,9 @@ def handle_restart_choice(message):
         else:
             bot.send_message(
                 message.chat.id, 'Пожалуйста, выберите "Да" или "Нет".')
-        bot.send_message(message.chat.id, reply_markup=get_main_keyboard())
+
+        bot.send_message(message.chat.id, 'Выбор принят',
+                         reply_markup=get_main_keyboard())
 
     except subprocess.CalledProcessError as e:
         logger.error(f"Error in restart command: {e}")
