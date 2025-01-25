@@ -8,10 +8,14 @@ import subprocess
 import pyautogui
 import pygetwindow as gw
 from config import POPULAR_SITES, TRANSLATIONS
+from pywinauto import Application, findwindows
+
 from fuzzywuzzy import process
 from keyboards import get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
+# Глобальная переменная для хранения message_id последнего сообщения с клавиатурой
+last_keyboard_message_id = None
 
 logger = logging.getLogger(__name__)
 
@@ -60,22 +64,56 @@ def setup_handlers(bot):
             pyautogui.click(button='right')
         bot.delete_message(message.chat.id, message.message_id)
 
+
     @bot.message_handler(func=lambda message: message.text == '🔊 Громкость')
     def volume(message):
-        update_volume_keyboard(message)
+        global last_keyboard_message_id
+        try:
+            # Отправляем сообщение с клавиатурой и сохраняем его message_id
+            sent_message = bot.send_message(
+                chat_id=message.chat.id,
+                text="Управление громкостью",
+                reply_markup=get_volume_keyboard(is_muted())
+            )
+            last_keyboard_message_id = sent_message.message_id
+        except Exception as e:
+            logger.error(f"Ошибка при отправке клавиатуры: {e}")
+
 
     def update_volume_keyboard(message):
-        bot.send_message(message.chat.id, "Управление громкостью", reply_markup=get_volume_keyboard(is_muted()))
-
+        global last_keyboard_message_id
+        try:
+            if last_keyboard_message_id:
+                # Редактируем сообщение, обновляя только клавиатуру
+                bot.edit_message_reply_markup(
+                    chat_id=message.chat.id,
+                    message_id=last_keyboard_message_id,
+                    reply_markup=get_volume_keyboard(is_muted())
+                )
+            else:
+                # Если message_id не сохранен, отправляем новое сообщение
+                sent_message = bot.send_message(
+                    chat_id=message.chat.id,
+                    text="Управление громкостью",
+                    reply_markup=get_volume_keyboard(is_muted())
+                )
+                last_keyboard_message_id = sent_message.message_id
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении клавиатуры: {e}")
+            
     @bot.message_handler(func=lambda message: message.text in ['🔇 Выключить звук', '🔊 Включить звук', '🔊 Повысить громкость', '🔉 Понизить громкость'])
     def handle_volume_controls(message):
         action = message.text
         if action == '🔇 Выключить звук':
             mute_volume()
             response = "Звук выключен."
+            update_volume_keyboard(message)
+
         elif action == '🔊 Включить звук':
             unmute_volume()
             response = "Звук включен."
+            update_volume_keyboard(message)
+
         elif action == '🔊 Повысить громкость':
             current_volume_percent = increase_volume()
             response = f'Громкость повышена. Текущая громкость: {current_volume_percent}%'
@@ -83,7 +121,6 @@ def setup_handlers(bot):
             current_volume_percent = decrease_volume()
             response = f'Громкость понижена. Текущая громкость: {current_volume_percent}%'
         bot.send_message(message.chat.id, response)
-        update_volume_keyboard(message)
 
     @bot.message_handler(func=lambda message: message.text == '📺 На весь экран')
     def fullscreen(message):

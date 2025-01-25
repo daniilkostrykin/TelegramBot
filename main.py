@@ -4,6 +4,7 @@ import logging
 import telebot
 from config import BOT_TOKEN
 from bot_handlers import setup_handlers
+from pywinauto import Application, findwindows
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
