@@ -13,13 +13,15 @@ from pywinauto import Application, findwindows
 import pygetwindow as gw
 import shlex
 from config import POPULAR_SITES, TRANSLATIONS
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
-
-
 
 
 def get_main_keyboard():
@@ -29,6 +31,7 @@ def get_main_keyboard():
     markup.row(video_button, computer_button)
     return markup
 
+
 def open_webpage(url, chat_id):
     """Открывает веб-страницу в браузере и отправляет уведомление."""
     try:
@@ -36,7 +39,8 @@ def open_webpage(url, chat_id):
         bot.send_message(chat_id, f"Открываю: {url}")
     except Exception as e:
         logger.error(f"Failed to open URL: {url}. Error: {e}")
-        bot.send_message(chat_id, f"Не удалось открыть URL: {url}. Произошла ошибка.")
+        bot.send_message(
+            chat_id, f"Не удалось открыть URL: {url}. Произошла ошибка.")
 
 
 @bot.message_handler(commands=['start'])
@@ -79,29 +83,26 @@ def handle_computer(message):
     open_site_button = types.KeyboardButton('Открыть сайт')
     full_screen_button = types.KeyboardButton('📺 На весь экран')
     mouse_button = types.KeyboardButton('Мышь')
+    volume_button = types.KeyboardButton('Громкость')
     back_button = types.KeyboardButton('Назад')
     markup.add(off_button, restart_button)
-    markup.add(open_site_button, full_screen_button, mouse_button)
+    markup.add(open_site_button, full_screen_button,
+               mouse_button, volume_button)
     markup.add(back_button)
     bot.send_message(
         message.chat.id, "Управление компьютером", reply_markup=markup)
 
 
-@bot.message_handler(func=lambda message: message.text == '⏯️ Пауза / ⏸️ Воспроизведение')
-def video_pause(message):
-    pyautogui.press('space')
-    bot.delete_message(message.chat.id, message.message_id)
-
-
-@bot.message_handler(func=lambda message: message.text == '▶️ Перемотать вперед')
-def fast_forward(message):
-    pyautogui.press('right')
-    bot.delete_message(message.chat.id, message.message_id)
-
-
-@bot.message_handler(func=lambda message: message.text == '◀️ Перемотать назад')
-def fast_backward(message):
-    pyautogui.press('left')
+@bot.message_handler(func=lambda message: message.text in ['⏯️ Пауза / ⏸️ Воспроизведение', '▶️ Перемотать вперед', '◀️ Перемотать назад'])
+def handle_video_controls(message):
+    """Обрабатывает управление видео: пауза/воспроизведение, перемотка вперед и назад."""
+    action = message.text
+    if action == '⏯️ Пауза / ⏸️ Воспроизведение':
+        pyautogui.press('space')
+    elif action == '▶️ Перемотать вперед':
+        pyautogui.press('right')
+    elif action == '◀️ Перемотать назад':
+        pyautogui.press('left')
     bot.delete_message(message.chat.id, message.message_id)
 
 
@@ -129,6 +130,94 @@ def handle_mouse(message):
         bot.delete_message(message.chat.id, message.message_id)
 
 
+@bot.message_handler(func=lambda message: message.text == 'Громкость')
+def volume(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    if is_muted():
+        mute_button = types.KeyboardButton('🔊 Включить звук')
+    else:
+        mute_button = types.KeyboardButton('🔇 Выключить звук')
+    up_button = types.KeyboardButton('🔊 Повысить громкость')
+    down_button = types.KeyboardButton('🔉 Понизить громкость')
+    back_button = types.KeyboardButton('Назад')
+    markup.add(mute_button)
+    markup.add(up_button, down_button)
+    markup.add(back_button)
+    bot.send_message(
+        message.chat.id, "Управление громкостью", reply_markup=markup)
+def get_audio_endpoint():
+    """Получает основной аудио-интерфейс."""
+    devices = AudioUtilities.GetSpeakers()
+    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+    volume = cast(interface, POINTER(IAudioEndpointVolume))
+    return volume
+def is_muted():
+    """Проверяет, выключен ли звук."""
+    volume = get_audio_endpoint()
+    return volume.GetMute()
+def set_volume(volume_level):
+    """Устанавливает уровень громкости (от 0 до 1)."""
+    volume = get_audio_endpoint()
+    volume.SetMasterVolumeLevelScalar(volume_level, None)
+
+def mute_volume():
+    """Выключает звук."""
+    volume = get_audio_endpoint()
+    volume.SetMute(1, None)
+
+def unmute_volume():
+    """Включает звук."""
+    volume = get_audio_endpoint()
+    volume.SetMute(0, None)
+
+
+def increase_volume(increment=0.1, message=None):
+    """Увеличивает громкость на указанную величину и отправляет сообщение."""
+    volume = get_audio_endpoint()
+    current_volume = volume.GetMasterVolumeLevelScalar()
+    new_volume = min(1, current_volume + increment)
+    set_volume(new_volume)
+    current_volume_percent = int(new_volume * 100)
+    bot.send_message(message.chat.id, f'Громкость повышена. Текущая громкость: {current_volume_percent}%')
+
+
+def decrease_volume(decrement=0.1, message=None):
+    """Уменьшает громкость на указанную величину и отправляет сообщение."""
+    volume = get_audio_endpoint()
+    current_volume = volume.GetMasterVolumeLevelScalar()
+    new_volume = max(0, current_volume - decrement)
+    set_volume(new_volume)
+    current_volume_percent = int(new_volume * 100)
+    bot.send_message(message.chat.id, f'Громкость понижена. Текущая громкость: {current_volume_percent}%')
+
+
+@bot.message_handler(func=lambda message: message.text in ['🔇 Выключить звук', '🔊 Повысить громкость', '🔉 Понизить громкость', '🔊 Включить звук'])
+def handle_volume_controls(message):
+    """Обрабатывает управление громкостью: выключение, повышение и понижение."""
+    action = message.text
+    if action == '🔇 Выключить звук':
+        mute_volume()
+        bot.send_message(message.chat.id, "Звук выключен.")
+    elif action == '🔊 Включить звук':
+        unmute_volume()
+        bot.send_message(message.chat.id, "Звук включен.")
+    elif action == '🔊 Повысить громкость':
+        increase_volume(message=message)
+    elif action == '🔉 Понизить громкость':
+        decrease_volume(message=message)
+    bot.delete_message(message.chat.id, message.message_id)
+
+
+
+
+
+
+
+
+
+
+
+
 def get_closest_site(query):
     """Функция для поиска наиболее близкого сайта по названию."""
     closest_match, score = process.extractOne(query, POPULAR_SITES.keys())
@@ -147,12 +236,14 @@ def fullscreen(message):
     else:
         print("Нет активного окна")
 
+
 def get_closest_app(query):
     """Функция для поиска наиболее близкого приложения по названию."""
     closest_match, score = process.extractOne(query, TRANSLATIONS.keys())
     if score > 60:
         return TRANSLATIONS[closest_match]
     return None
+
 
 def open_file(path):
     """Открывает файл или папку по пути."""
@@ -161,8 +252,8 @@ def open_file(path):
         print(f"Открываю: {path}")
         return True
     except Exception as e:
-         print(f"Ошибка при открытии файла или папки: {e}")
-         return False
+        print(f"Ошибка при открытии файла или папки: {e}")
+        return False
 
 
 def open_application(query):
@@ -183,13 +274,14 @@ def open_application(query):
             elif closest_app.endswith(".lnk"):
                 return open_file(closest_app)
             else:  # Если это папка
-                 return open_file(closest_app)
+                return open_file(closest_app)
 
         else:
             print(f"Путь для {query} не существует: {closest_app}")
     else:
         print(f"Не найдено подходящего приложения для команды '{query}'")
     return False
+
 
 def handle_shutdown_restart_choice(message, action):
     """Общий обработчик для подтверждения перезагрузки и выключения."""
@@ -205,19 +297,19 @@ def handle_shutdown_restart_choice(message, action):
             bot.send_message(
                 message.chat.id, f'Отмена {action} компьютера.')
         else:
-             bot.send_message(
-                 message.chat.id, 'Пожалуйста, выберите "Да" или "Нет".')
+            bot.send_message(
+                message.chat.id, 'Пожалуйста, выберите "Да" или "Нет".')
 
     except subprocess.CalledProcessError as e:
         logger.error(f"Error in {action} command: {e}")
         bot.send_message(message.chat.id, f'Ошибка при {action} компьютера')
     except Exception as e:
-         logger.error(f"Error in {action} command: {e}")
-         bot.send_message(message.chat.id, 'Произошла ошибка')
+        logger.error(f"Error in {action} command: {e}")
+        bot.send_message(message.chat.id, 'Произошла ошибка')
     finally:
         bot.send_message(message.chat.id, 'Вернулся к основному меню',
                          reply_markup=get_main_keyboard())
-        
+
 
 @bot.message_handler(func=lambda message: message.text == 'Выключить компьютер')
 def shutdown(message):
@@ -228,10 +320,12 @@ def shutdown(message):
                    types.KeyboardButton(text='Нет'))
         bot.send_message(
             message.chat.id, 'Вы хотите выключить компьютер?', reply_markup=markup)
-        bot.register_next_step_handler(message, lambda msg: handle_shutdown_restart_choice(msg, 'выключение'))
+        bot.register_next_step_handler(
+            message, lambda msg: handle_shutdown_restart_choice(msg, 'выключение'))
     except Exception as e:
         logger.error(f"Error in shutdown command: {e}")
         bot.send_message(message.chat.id, 'Произошла ошибка')
+
 
 @bot.message_handler(func=lambda message: message.text == 'Перезагрузить компьютер')
 def restart(message):
@@ -242,7 +336,8 @@ def restart(message):
                    types.KeyboardButton(text='Нет'))
         bot.send_message(
             message.chat.id, 'Вы хотите перезагрузить компьютер?', reply_markup=markup)
-        bot.register_next_step_handler(message,  lambda msg: handle_shutdown_restart_choice(msg, 'перезагрузка'))
+        bot.register_next_step_handler(
+            message, lambda msg: handle_shutdown_restart_choice(msg, 'перезагрузка'))
     except subprocess.CalledProcessError as e:
         logger.error(f"Error in restart command: {e}")
         bot.send_message(message.chat.id, 'Ошибка при перезагрузке компьютера')
@@ -262,7 +357,8 @@ def handle_site_or_app_input(message):
     """Обрабатывает ввод пользователя после нажатия на кнопку 'Открыть сайт'."""
     query = message.text.strip().lower()
     if not query:
-        bot.send_message(message.chat.id, "Вы не ввели название сайта или приложения.")
+        bot.send_message(
+            message.chat.id, "Вы не ввели название сайта или приложения.")
         return
     try:
         closest_site = get_closest_site(query)
@@ -275,7 +371,7 @@ def handle_site_or_app_input(message):
                 bot.send_message(
                     message.chat.id, f'Не удалось открыть приложение "{query}".')
         elif closest_site:  # Если нашли сайт
-           open_webpage(closest_site, message.chat.id)
+            open_webpage(closest_site, message.chat.id)
         else:  # Если не нашли ни приложение, ни сайт
             bot.send_message(
                 message.chat.id, f'Не нашёл сайт "{query}" в списке популярных. Ищу в Яндексе.')
