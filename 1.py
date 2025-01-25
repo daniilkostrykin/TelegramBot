@@ -11,13 +11,17 @@ from pywinauto import Application, findwindows
 from fuzzywuzzy import process
 from pywinauto import Application, findwindows
 import pygetwindow as gw
+import shlex
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
 
-popular_sites = {
+
+# Выносим константы в config (нужно будет обновить config.py)
+POPULAR_SITES = {
     "вк": "https://vk.com",
     "одноклассники": "https://ok.ru",
     "яндекс": "https://yandex.ru",
@@ -35,7 +39,7 @@ popular_sites = {
     "госуслуги": "https://www.gosuslugi.ru"
 }
 
-translations = {
+TRANSLATIONS = {
     "рабочий стол": os.path.join(os.path.expanduser("~"), "Desktop"),
     "загрузки": os.path.join(os.path.expanduser("~"), "Downloads"),
     "документы": os.path.join(os.path.expanduser("~"), "Documents"),
@@ -49,6 +53,23 @@ translations = {
 }
 
 
+def get_main_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    video_button = types.KeyboardButton('Видео')
+    computer_button = types.KeyboardButton('Компьютер')
+    markup.row(video_button, computer_button)
+    return markup
+
+def open_webpage(url, chat_id):
+    """Открывает веб-страницу в браузере и отправляет уведомление."""
+    try:
+        webbrowser.open(url)
+        bot.send_message(chat_id, f"Открываю: {url}")
+    except Exception as e:
+        logger.error(f"Failed to open URL: {url}. Error: {e}")
+        bot.send_message(chat_id, f"Не удалось открыть URL: {url}. Произошла ошибка.")
+
+
 @bot.message_handler(commands=['start'])
 def start(message):
     try:
@@ -57,14 +78,6 @@ def start(message):
     except Exception as e:
         logger.error(f"Error in start command: {e}")
         bot.send_message(message.chat.id, 'Произошла ошибка')
-
-
-def get_main_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    video_button = types.KeyboardButton('Видео')
-    computer_button = types.KeyboardButton('Компьютер')
-    markup.row(video_button, computer_button)
-    return markup
 
 
 @bot.message_handler(func=lambda message: message.text == 'Назад')
@@ -149,9 +162,9 @@ def handle_mouse(message):
 
 def get_closest_site(query):
     """Функция для поиска наиболее близкого сайта по названию."""
-    closest_match, score = process.extractOne(query, popular_sites.keys())
+    closest_match, score = process.extractOne(query, POPULAR_SITES.keys())
     if score > 70:
-        return popular_sites[closest_match]
+        return POPULAR_SITES[closest_match]
     return None
 
 
@@ -165,20 +178,28 @@ def fullscreen(message):
     else:
         print("Нет активного окна")
 
-
 def get_closest_app(query):
-    """Функция для поиска наиболее близкого сайта по названию."""
-    closest_match, score = process.extractOne(query, translations.keys())
+    """Функция для поиска наиболее близкого приложения по названию."""
+    closest_match, score = process.extractOne(query, TRANSLATIONS.keys())
     if score > 60:
-        return translations[closest_match]
+        return TRANSLATIONS[closest_match]
     return None
+
+def open_file(path):
+    """Открывает файл или папку по пути."""
+    try:
+        os.startfile(path)
+        print(f"Открываю: {path}")
+        return True
+    except Exception as e:
+         print(f"Ошибка при открытии файла или папки: {e}")
+         return False
 
 
 def open_application(query):
     """Открывает приложение или папку по указанной команде."""
     query = query.lower().strip()
-    print(f"Команда в open_application: {query}")  # Добавленная строка
-
+    print(f"Команда в open_application: {query}")
     closest_app = get_closest_app(query)  # Найти ближайшее приложение
     if closest_app:
         if os.path.exists(closest_app):
@@ -189,26 +210,45 @@ def open_application(query):
                     return True
                 except Exception as e:
                     print(f"Ошибка при открытии {query}: {e}")
+                    return False
             elif closest_app.endswith(".lnk"):
-                try:
-                    os.startfile(closest_app)
-                    print(f"Открываю {query} через os.startfile...")
-                    return True
-                except Exception as e:
-                    print(f"Ошибка при открытии ярлыка {query}: {e}")
+                return open_file(closest_app)
             else:  # Если это папка
-                try:
-                    os.startfile(closest_app)
-                    print(f"Открываю папку {query}...")
-                    return True
-                except Exception as e:
-                    print(f"Ошибка при открытии папки {query}: {e}")
+                 return open_file(closest_app)
+
         else:
             print(f"Путь для {query} не существует: {closest_app}")
     else:
         print(f"Не найдено подходящего приложения для команды '{query}'")
     return False
 
+def handle_shutdown_restart_choice(message, action):
+    """Общий обработчик для подтверждения перезагрузки и выключения."""
+    try:
+        if message.text == 'Да':
+            bot.send_message(
+                message.chat.id, f'{action.capitalize()} компьютера...')
+            if action == 'выключение':
+                subprocess.run(["shutdown", "/s", "/t", "5"], check=True)
+            elif action == 'перезагрузка':
+                subprocess.run(["shutdown", "/r", "/t", "5"], check=True)
+        elif message.text == 'Нет':
+            bot.send_message(
+                message.chat.id, f'Отмена {action} компьютера.')
+        else:
+             bot.send_message(
+                 message.chat.id, 'Пожалуйста, выберите "Да" или "Нет".')
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error in {action} command: {e}")
+        bot.send_message(message.chat.id, f'Ошибка при {action} компьютера')
+    except Exception as e:
+         logger.error(f"Error in {action} command: {e}")
+         bot.send_message(message.chat.id, 'Произошла ошибка')
+    finally:
+        bot.send_message(message.chat.id, 'Вернулся к основному меню',
+                         reply_markup=get_main_keyboard())
+        
 
 @bot.message_handler(func=lambda message: message.text == 'Выключить компьютер')
 def shutdown(message):
@@ -219,32 +259,10 @@ def shutdown(message):
                    types.KeyboardButton(text='Нет'))
         bot.send_message(
             message.chat.id, 'Вы хотите выключить компьютер?', reply_markup=markup)
-        bot.register_next_step_handler(message, handle_shutdown_choice)
+        bot.register_next_step_handler(message, lambda msg: handle_shutdown_restart_choice(msg, 'выключение'))
     except Exception as e:
         logger.error(f"Error in shutdown command: {e}")
         bot.send_message(message.chat.id, 'Произошла ошибка')
-
-
-def handle_shutdown_choice(message):
-    try:
-        if message.text == 'Да':
-            bot.send_message(message.chat.id, 'Выключение компьютера...')
-            subprocess.run(["shutdown", "/s", "/t", "5"], check=True)
-        elif message.text == 'Нет':
-            bot.send_message(message.chat.id, 'Отмена выключения компьютера.')
-        else:
-            bot.send_message(
-                message.chat.id, 'Пожалуйста, выберите "Да" или "Нет".')
-        bot.send_message(message.chat.id, 'Выбор принят',
-                         reply_markup=get_main_keyboard())
-
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error in shutdown command: {e}")
-        bot.send_message(message.chat.id, 'Ошибка при выключении компьютера')
-    except Exception as e:
-        logger.error(f"Error in shutdown command: {e}")
-        bot.send_message(message.chat.id, 'Произошла ошибка')
-
 
 @bot.message_handler(func=lambda message: message.text == 'Перезагрузить компьютер')
 def restart(message):
@@ -255,30 +273,7 @@ def restart(message):
                    types.KeyboardButton(text='Нет'))
         bot.send_message(
             message.chat.id, 'Вы хотите перезагрузить компьютер?', reply_markup=markup)
-        bot.register_next_step_handler(message, handle_restart_choice)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error in restart command: {e}")
-        bot.send_message(message.chat.id, 'Ошибка при перезагрузке компьютера')
-    except Exception as e:
-        logger.error(f"Error in restart command: {e}")
-        bot.send_message(message.chat.id, 'Произошла ошибка')
-
-
-def handle_restart_choice(message):
-    try:
-        if message.text == 'Да':
-            bot.send_message(message.chat.id, 'Перезагрузка компьютера...')
-            subprocess.run(["shutdown", "/r", "/t", "5"], check=True)
-        elif message.text == 'Нет':
-            bot.send_message(
-                message.chat.id, 'Отмена перезагрузки компьютера.')
-        else:
-            bot.send_message(
-                message.chat.id, 'Пожалуйста, выберите "Да" или "Нет".')
-
-        bot.send_message(message.chat.id, 'Выбор принят',
-                         reply_markup=get_main_keyboard())
-
+        bot.register_next_step_handler(message,  lambda msg: handle_shutdown_restart_choice(msg, 'перезагрузка'))
     except subprocess.CalledProcessError as e:
         logger.error(f"Error in restart command: {e}")
         bot.send_message(message.chat.id, 'Ошибка при перезагрузке компьютера')
@@ -297,6 +292,9 @@ def open_site_handler(message):
 def handle_site_or_app_input(message):
     """Обрабатывает ввод пользователя после нажатия на кнопку 'Открыть сайт'."""
     query = message.text.strip().lower()
+    if not query:
+        bot.send_message(message.chat.id, "Вы не ввели название сайта или приложения.")
+        return
     try:
         closest_site = get_closest_site(query)
         closest_app = get_closest_app(query)
@@ -304,19 +302,16 @@ def handle_site_or_app_input(message):
         if closest_app:  # Если нашли приложение
             if open_application(query):
                 bot.send_message(message.chat.id, "Открываю приложение...")
-                return
             else:
                 bot.send_message(
                     message.chat.id, f'Не удалось открыть приложение "{query}".')
         elif closest_site:  # Если нашли сайт
-            bot.send_message(message.chat.id, f'Открываю сайт {closest_site}')
-            webbrowser.open(closest_site)
+           open_webpage(closest_site, message.chat.id)
         else:  # Если не нашли ни приложение, ни сайт
             bot.send_message(
-                message.chat.id, f'Не нашёл сайт "{query}" в списке популярных. Попробую поискать в Яндексе.')
+                message.chat.id, f'Не нашёл сайт "{query}" в списке популярных. Ищу в Яндексе.')
             search_url = f"https://yandex.ru/search/?text={query}"
-            bot.send_message(message.chat.id, f'Ищу по запросу: {search_url}')
-            webbrowser.open(search_url)
+            open_webpage(search_url, message.chat.id)
 
     except Exception as e:
         logger.error(f"Error while handling message: {e}")
