@@ -6,8 +6,8 @@ def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     video_button = types.KeyboardButton('Видео')
     computer_button = types.KeyboardButton('Компьютер')
-    deepseek_button = types.KeyboardButton('DeepSeek')
-    markup.row(video_button, computer_button, deepseek_button)
+    gemini_button = types.KeyboardButton('Gemini')
+    markup.row(video_button, computer_button, gemini_button)
     return markup
 
 def get_video_keyboard():

@@ -15,15 +15,13 @@ from openai import OpenAI
 import google.generativeai as genai
 from config import GEMINI_API_KEY
 from fuzzywuzzy import process
-from keyboards import get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard
+from keyboards import get_info_size_keyboard, get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
-from config import DEEPSEEK_API_KEY, DEEPSEEK_SEARCH_URL, DEEPSEEK_INTERNET_SEARCH_URL
-# Глобальная переменная для хранения message_id последнего сообщения с клавиатурой
+
 last_keyboard_message_id = None
 
 logger = logging.getLogger(__name__)
-client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
 genai.configure(api_key=GEMINI_API_KEY)
 
@@ -58,29 +56,54 @@ def setup_handlers(bot):
     def handle_gemini(message):
         bot.send_message(message.chat.id, "Gemini",
                          reply_markup=get_gemini_keyboard())
+        
+
 
     @bot.message_handler(func=lambda message: message.text in ['🔍 Поиск', '🔍 Поиск в интернете', '📂 Открыть папку', '⬅️ Назад'])
     def handle_gemini_controls(message):
         action = message.text
         if action == '🔍 Поиск':
             bot.send_message(message.chat.id, "Введите запрос для поиска.")
-            bot.register_next_step_handler(message, handle_search_query)
-        elif action == '🔍 Поиск в интернете':
-            bot.send_message(
-                message.chat.id, "Введите запрос для поиска в интернете.")
             bot.register_next_step_handler(
-                message, handle_internet_search_query)
+                message, get_user_query_and_choose_size, search_type='обычный')
+        elif action == '🔍 Поиск в интернете':
+            bot.send_message(message.chat.id, "Введите запрос для поиска в интернете.")
+            bot.register_next_step_handler(
+                message, get_user_query_and_choose_size, search_type='интернет')
         elif action == '📂 Открыть папку':
             bot.send_message(message.chat.id, "Введите путь к папке.")
             bot.register_next_step_handler(message, handle_open_folder)
         bot.delete_message(message.chat.id, message.message_id)
 
-    def handle_search_query(message):
+
+
+    def get_user_query_and_choose_size(message, search_type):
         query = message.text
+        bot.send_message(message.chat.id, "Выберите размер ответа:", reply_markup=get_info_size_keyboard())
+        bot.register_next_step_handler(message, handle_info_size, search_type=search_type, query=query)
+
+
+    def handle_info_size(message, search_type, query):
+        if message.text == '📏 Кратко':
+            size = 'кратко'
+        elif message.text == '📐 Подробно':
+            size = 'подробно'
+        else:
+            bot.send_message(
+                message.chat.id, "Неверный выбор. Попробуйте снова.")
+            return
+
+        if search_type == 'обычный':
+            handle_search_query(message, size, query)
+        elif search_type == 'интернет':
+            handle_internet_search_query(message, size, query)
+
+
+    def handle_search_query(message, size, query):
         try:
             model = genai.GenerativeModel('gemini-2.0-flash-exp')
             response = model.generate_content(
-                f"Найди информацию кратко: {query}"
+                f"Найди информацию {size}: {query}"
             )
             response_text = "".join(part.text for part in response.parts)
         except Exception as e:
@@ -88,14 +111,14 @@ def setup_handlers(bot):
 
         bot.send_message(message.chat.id, response_text)
         bot.send_message(message.chat.id, "Выберите следующее действие:",
-                         reply_markup=get_gemini_keyboard())
+                        reply_markup=get_gemini_keyboard())
 
-    def handle_internet_search_query(message):
-        query = message.text
+
+    def handle_internet_search_query(message, size, query):
         try:
             model = genai.GenerativeModel('gemini-2.0-flash-exp')
             response = model.generate_content(
-                f"Найди информацию в интернете: {query}"
+                f"Найди информацию в интернете {size}: {query}"
             )
             response_text = "".join(part.text for part in response.parts)
         except Exception as e:
@@ -103,7 +126,7 @@ def setup_handlers(bot):
 
         bot.send_message(message.chat.id, response_text)
         bot.send_message(message.chat.id, "Выберите следующее действие:",
-                         reply_markup=get_gemini_keyboard())
+                        reply_markup=get_gemini_keyboard())
 
 
     def handle_open_folder(message):
