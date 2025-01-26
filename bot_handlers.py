@@ -78,7 +78,7 @@ def setup_handlers(bot):
         query = message.text
         try:
             # Вызов Gemini API для поиска
-            model = genai.GenerativeModel('gemini-pro')
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
             response = model.generate_content(
                 f"Найди информацию: {query}"
             )
@@ -94,7 +94,7 @@ def setup_handlers(bot):
         query = message.text
         try:
             # Вызов Gemini API для поиска в интернете
-            model = genai.GenerativeModel('gemini-pro')
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
             response = model.generate_content(
                 f"Найди информацию в интернете: {query}"
             )
