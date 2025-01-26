@@ -6,7 +6,8 @@ def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     video_button = types.KeyboardButton('Видео')
     computer_button = types.KeyboardButton('Компьютер')
-    markup.row(video_button, computer_button)
+    deepseek_button = types.KeyboardButton('DeepSeek')
+    markup.row(video_button, computer_button, deepseek_button)
     return markup
 
 def get_video_keyboard():
@@ -35,6 +36,16 @@ def get_computer_keyboard():
     back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(off_button, restart_button, chrome_button)
     markup.add(open_site_button, full_screen_button, mouse_button, volume_button)
+    markup.add(back_button)
+    return markup
+
+def get_deepseek_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    search_button = types.KeyboardButton('🔍 Поиск')
+    search_internet_button = types.KeyboardButton('🔍 Поиск в интернете')
+    open_button = types.KeyboardButton('📂 Открыть папку')
+    back_button = types.KeyboardButton('⬅️ Назад')
+    markup.add(search_button, open_button, search_internet_button)
     markup.add(back_button)
     return markup
 
