@@ -39,7 +39,7 @@ def get_computer_keyboard():
     markup.add(back_button)
     return markup
 
-def get_deepseek_keyboard():
+def get_gemini_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     search_button = types.KeyboardButton('🔍 Поиск')
     search_internet_button = types.KeyboardButton('🔍 Поиск в интернете')
@@ -47,6 +47,13 @@ def get_deepseek_keyboard():
     back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(search_button, open_button, search_internet_button)
     markup.add(back_button)
+    return markup
+
+def get_info_size_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    short_button = types.KeyboardButton('📏 Кратко')
+    long_button = types.KeyboardButton('📐 Подробно')
+    markup.add(short_button, long_button)
     return markup
 
 def get_mouse_keyboard():

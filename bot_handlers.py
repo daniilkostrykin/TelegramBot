@@ -15,7 +15,7 @@ from openai import OpenAI
 import google.generativeai as genai
 from config import GEMINI_API_KEY
 from fuzzywuzzy import process
-from keyboards import get_deepseek_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard
+from keyboards import get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
 from config import DEEPSEEK_API_KEY, DEEPSEEK_SEARCH_URL, DEEPSEEK_INTERNET_SEARCH_URL
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
 genai.configure(api_key=GEMINI_API_KEY)
+
 
 def setup_handlers(bot):
     @bot.message_handler(commands=['start'])
@@ -53,13 +54,13 @@ def setup_handlers(bot):
         bot.send_message(message.chat.id, "Управление компьютером",
                          reply_markup=get_computer_keyboard())
 
-    @bot.message_handler(func=lambda message: message.text == 'DeepSeek')
-    def handle_deepseek(message):
-        bot.send_message(message.chat.id, "DeepSeek",
-                         reply_markup=get_deepseek_keyboard())
+    @bot.message_handler(func=lambda message: message.text == 'Gemini')
+    def handle_gemini(message):
+        bot.send_message(message.chat.id, "Gemini",
+                         reply_markup=get_gemini_keyboard())
 
     @bot.message_handler(func=lambda message: message.text in ['🔍 Поиск', '🔍 Поиск в интернете', '📂 Открыть папку', '⬅️ Назад'])
-    def handle_deepseek_controls(message):
+    def handle_gemini_controls(message):
         action = message.text
         if action == '🔍 Поиск':
             bot.send_message(message.chat.id, "Введите запрос для поиска.")
@@ -77,47 +78,45 @@ def setup_handlers(bot):
     def handle_search_query(message):
         query = message.text
         try:
-            # Вызов Gemini API для поиска
             model = genai.GenerativeModel('gemini-2.0-flash-exp')
             response = model.generate_content(
-                f"Найди информацию: {query}"
+                f"Найди информацию кратко: {query}"
             )
-            # Объединяем все части ответа в одну строку
             response_text = "".join(part.text for part in response.parts)
         except Exception as e:
             response_text = f"Ошибка при выполнении поиска: {str(e)}"
-        
+
         bot.send_message(message.chat.id, response_text)
-        bot.send_message(message.chat.id, "Выберите следующее действие:", reply_markup=get_deepseek_keyboard())
+        bot.send_message(message.chat.id, "Выберите следующее действие:",
+                         reply_markup=get_gemini_keyboard())
 
     def handle_internet_search_query(message):
         query = message.text
         try:
-            # Вызов Gemini API для поиска в интернете
             model = genai.GenerativeModel('gemini-2.0-flash-exp')
             response = model.generate_content(
                 f"Найди информацию в интернете: {query}"
             )
-            # Объединяем все части ответа в одну строку
             response_text = "".join(part.text for part in response.parts)
         except Exception as e:
             response_text = f"Ошибка при выполнении поиска в интернете: {str(e)}"
-        
+
         bot.send_message(message.chat.id, response_text)
-        bot.send_message(message.chat.id, "Выберите следующее действие:", reply_markup=get_deepseek_keyboard())   
+        bot.send_message(message.chat.id, "Выберите следующее действие:",
+                         reply_markup=get_gemini_keyboard())
 
 
-
-    # Обработчик запроса для открытия папки
     def handle_open_folder(message):
         folder_path = message.text
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
             os.startfile(folder_path)
             bot.send_message(message.chat.id, f"Папка открыта: {folder_path}")
         else:
-            bot.send_message(message.chat.id, "Папка не найдена. Пожалуйста, проверьте путь.")
-        bot.send_message(message.chat.id, "Выберите следующее действие:", reply_markup=get_deepseek_keyboard())
-    
+            bot.send_message(
+                message.chat.id, "Папка не найдена. Пожалуйста, проверьте путь.")
+        bot.send_message(message.chat.id, "Выберите следующее действие:",
+                         reply_markup=get_gemini_keyboard())
+
     @bot.message_handler(func=lambda message: message.text in ['⏯️ Пауза / ⏸️ Воспроизведение', '▶️ Перемотать вперед', '◀️ Перемотать назад'])
     def handle_video_controls(message):
         action = message.text
