@@ -49,6 +49,16 @@ def get_gemini_keyboard():
     markup.add(back_button)
     return markup
 
+def get_gemini_model_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    model_1_button = types.KeyboardButton('Gemini 2.0 Experimental')
+    model_2_button = types.KeyboardButton('Gemini 1.5 Pro')
+    model_3_button = types.KeyboardButton('Gemini 1.5 Flash')
+    back_button = types.KeyboardButton('⬅️ Назад')
+    markup.add(model_1_button, model_2_button, model_3_button)
+    markup.add(back_button)
+    return markup
+
 def get_info_size_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     short_button = types.KeyboardButton('📏 Кратко')

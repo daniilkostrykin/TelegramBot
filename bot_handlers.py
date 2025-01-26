@@ -1,5 +1,5 @@
 # bot_handlers.py
-
+import re
 import telebot
 from telebot import types
 import logging
@@ -15,7 +15,7 @@ from openai import OpenAI
 import google.generativeai as genai
 from config import GEMINI_API_KEY
 from fuzzywuzzy import process
-from keyboards import get_info_size_keyboard, get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard
+from keyboards import get_gemini_model_keyboard, get_info_size_keyboard, get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
 
@@ -40,7 +40,6 @@ def setup_handlers(bot):
     def back(message):
         bot.send_message(message.chat.id, "⬅️ Назад",
                          reply_markup=get_main_keyboard())
-        bot.delete_message(message.chat.id, message.message_id)
 
     @bot.message_handler(func=lambda message: message.text == 'Видео')
     def handle_video(message):
@@ -56,32 +55,68 @@ def setup_handlers(bot):
     def handle_gemini(message):
         bot.send_message(message.chat.id, "Gemini",
                          reply_markup=get_gemini_keyboard())
-        
 
+    def format_bold_text(text):
+        """Форматирует текст, заменяя **текст** на жирный."""
+        def replace_bold(match):
+            return f'<b>{match.group(1)}</b>'
+
+        formatted_text = re.sub(
+            r'\*\*(.*?)\*\*', replace_bold, text, flags=re.DOTALL)
+        return formatted_text
 
     @bot.message_handler(func=lambda message: message.text in ['🔍 Поиск', '🔍 Поиск в интернете', '📂 Открыть папку', '⬅️ Назад'])
     def handle_gemini_controls(message):
         action = message.text
         if action == '🔍 Поиск':
-            bot.send_message(message.chat.id, "Введите запрос для поиска.")
+            bot.send_message(message.chat.id, "Выберите модель:",
+                             reply_markup=get_gemini_model_keyboard())
             bot.register_next_step_handler(
-                message, get_user_query_and_choose_size, search_type='обычный')
+                message, handle_model_selection, search_type='обычный')
         elif action == '🔍 Поиск в интернете':
-            bot.send_message(message.chat.id, "Введите запрос для поиска в интернете.")
+            bot.send_message(message.chat.id, "Выберите модель:",
+                             reply_markup=get_gemini_model_keyboard())
             bot.register_next_step_handler(
-                message, get_user_query_and_choose_size, search_type='интернет')
+                message, handle_model_selection, search_type='интернет')
         elif action == '📂 Открыть папку':
             bot.send_message(message.chat.id, "Введите путь к папке.")
             bot.register_next_step_handler(message, handle_open_folder)
-        bot.delete_message(message.chat.id, message.message_id)
 
+    def handle_model_selection(message, search_type):
+        if message.text == 'Gemini 2.0 Experimental':
+            model_name = 'gemini-2.0-flash-exp'
+        elif message.text == 'Gemini 1.5 Pro':
+            model_name = 'gemini-1.5-pro'
+        elif message.text == 'Gemini 1.5 Flash':
+            model_name = 'gemini-1.5-flash'
+        elif message.text == '⬅️ Назад':
+            bot.send_message(
+                message.chat.id, "Возврат в главное меню.", reply_markup=get_gemini_keyboard())
+            return
+        else:
+            bot.send_message(
+                message.chat.id, "Неверный выбор модели. Попробуйте снова.")
+            return
 
+        # Сохраняем выбранную модель в объекте message
+        message.model_name = model_name
+
+        if search_type == 'обычный':
+            bot.send_message(message.chat.id, "Введите запрос для поиска.")
+            bot.register_next_step_handler(
+                message, get_user_query_and_choose_size, search_type=search_type)
+        elif search_type == 'интернет':
+            bot.send_message(
+                message.chat.id, "Введите запрос для поиска в интернете.")
+            bot.register_next_step_handler(
+                message, get_user_query_and_choose_size, search_type=search_type)
 
     def get_user_query_and_choose_size(message, search_type):
         query = message.text
-        bot.send_message(message.chat.id, "Выберите размер ответа:", reply_markup=get_info_size_keyboard())
-        bot.register_next_step_handler(message, handle_info_size, search_type=search_type, query=query)
-
+        bot.send_message(message.chat.id, "Выберите размер ответа:",
+                         reply_markup=get_info_size_keyboard())
+        bot.register_next_step_handler(
+            message, handle_info_size, search_type=search_type, query=query)
 
     def handle_info_size(message, search_type, query):
         if message.text == '📏 Кратко':
@@ -93,15 +128,17 @@ def setup_handlers(bot):
                 message.chat.id, "Неверный выбор. Попробуйте снова.")
             return
 
+        # Получаем выбранную модель из объекта message
+        model_name = getattr(message, 'model_name', 'gemini-2.0-flash-exp')
+
         if search_type == 'обычный':
-            handle_search_query(message, size, query)
+            handle_search_query(message, size, query, model_name)
         elif search_type == 'интернет':
-            handle_internet_search_query(message, size, query)
+            handle_internet_search_query(message, size, query, model_name)
 
-
-    def handle_search_query(message, size, query):
+    def handle_search_query(message, size, query, model_name):
         try:
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            model = genai.GenerativeModel(model_name)
             response = model.generate_content(
                 f"Найди информацию {size}: {query}"
             )
@@ -109,14 +146,14 @@ def setup_handlers(bot):
         except Exception as e:
             response_text = f"Ошибка при выполнении поиска: {str(e)}"
 
-        bot.send_message(message.chat.id, response_text)
+        formatted_text = format_bold_text(response_text)
+        bot.send_message(message.chat.id, formatted_text, parse_mode='HTML')
         bot.send_message(message.chat.id, "Выберите следующее действие:",
-                        reply_markup=get_gemini_keyboard())
+                         reply_markup=get_gemini_keyboard())
 
-
-    def handle_internet_search_query(message, size, query):
+    def handle_internet_search_query(message, size, query, model_name):
         try:
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            model = genai.GenerativeModel(model_name)
             response = model.generate_content(
                 f"Найди информацию в интернете {size}: {query}"
             )
@@ -124,10 +161,10 @@ def setup_handlers(bot):
         except Exception as e:
             response_text = f"Ошибка при выполнении поиска в интернете: {str(e)}"
 
-        bot.send_message(message.chat.id, response_text)
+        formatted_text = format_bold_text(response_text)
+        bot.send_message(message.chat.id, formatted_text, parse_mode='HTML')
         bot.send_message(message.chat.id, "Выберите следующее действие:",
-                        reply_markup=get_gemini_keyboard())
-
+                         reply_markup=get_gemini_keyboard())
 
     def handle_open_folder(message):
         folder_path = message.text
@@ -149,7 +186,6 @@ def setup_handlers(bot):
             pyautogui.press('right')
         elif action == '◀️ Перемотать назад':
             pyautogui.press('left')
-        bot.delete_message(message.chat.id, message.message_id)
 
     @bot.message_handler(func=lambda message: message.text == '🖱️ Мышь')
     def mouse(message):
@@ -162,7 +198,6 @@ def setup_handlers(bot):
             pyautogui.click(button='left')
         elif message.text == 'Право':
             pyautogui.click(button='right')
-        bot.delete_message(message.chat.id, message.message_id)
 
     @bot.message_handler(func=lambda message: message.text == '🔊 Громкость')
     def volume(message):
