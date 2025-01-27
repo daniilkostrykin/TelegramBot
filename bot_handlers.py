@@ -16,7 +16,7 @@ from openai import OpenAI
 import google.generativeai as genai
 from config import GEMINI_API_KEY
 from fuzzywuzzy import process
-from keyboards import get_gemini_model_keyboard, get_info_size_keyboard, get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard
+from keyboards import get_gemini_model_keyboard, get_info_size_keyboard, get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard, get_gemini_dialog_keyboard
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
 last_keyboard_message_id = None
@@ -24,7 +24,7 @@ last_keyboard_message_id = None
 logger = logging.getLogger(__name__)
 
 genai.configure(api_key=GEMINI_API_KEY)
-
+dialog_sessions = {}  # Словарь для хранения истории диалогов
 
 def setup_handlers(bot):
     @bot.message_handler(commands=['start'])
@@ -57,7 +57,7 @@ def setup_handlers(bot):
     def handle_gemini(message):
         bot.send_message(message.chat.id, "Gemini",
                          reply_markup=get_gemini_keyboard())
-
+    
     def format_bold_text(text):
         """Форматирует текст, заменяя **текст** на жирный."""
         def replace_bold(match):
@@ -67,10 +67,11 @@ def setup_handlers(bot):
             r'\*\*(.*?)\*\*', replace_bold, text, flags=re.DOTALL)
         return formatted_text
 
-    @bot.message_handler(func=lambda message: message.text in ['🔍 Поиск', '🔍 Поиск в интернете', '📂 Открыть папку', '⬅️ Назад'])
+
+    @bot.message_handler(func=lambda message: message.text in ['🔍 Запрос', '💬 Диалог', '🔍 Поиск в интернете', '📂 Открыть папку', '⬅️ Назад'])
     def handle_gemini_controls(message):
         action = message.text
-        if action == '🔍 Поиск':
+        if action == '🔍 Запрос':
             bot.send_message(message.chat.id, "Выберите модель",
                              reply_markup=get_gemini_model_keyboard())
             bot.register_next_step_handler(
@@ -80,6 +81,10 @@ def setup_handlers(bot):
                              reply_markup=get_gemini_model_keyboard())
             bot.register_next_step_handler(
                 message, handle_model_selection, search_type='интернет')
+        elif action == '💬 Диалог':
+            bot.send_message(message.chat.id, "Выберите модель для диалога",
+                             reply_markup=get_gemini_model_keyboard())
+            bot.register_next_step_handler(message, handle_model_selection_dialog)
         elif action == '📂 Открыть папку':
             bot.send_message(message.chat.id, "Введите путь к папке.")
             bot.register_next_step_handler(message, handle_open_folder)
@@ -118,6 +123,29 @@ def setup_handlers(bot):
             bot.register_next_step_handler(
                 message, get_user_query_and_choose_size, search_type=search_type)
 
+    def handle_model_selection_dialog(message): # Обработчик выбора модели для диалога
+        if message.text == 'Gemini 2.0 Experimental':
+            model_name = 'gemini-2.0-flash-exp'
+        elif message.text == 'Gemini 1.5 Pro':
+            model_name = 'gemini-1.5-pro'
+        elif message.text == 'Gemini 1.5 Flash':
+            model_name = 'gemini-1.5-flash'
+        elif message.text == '⬅️ Назад':
+            bot.send_message(
+                message.chat.id, "Возврат в главное меню.", reply_markup=get_gemini_keyboard())
+            return
+        else:
+            bot.send_message(
+                message.chat.id, "Неверный выбор модели. Попробуйте снова.")
+            return
+        message.model_name = model_name
+        bot.send_message(
+            message.chat.id,
+            f"Вы выбрали: {model_name}. Начните диалог.",
+            reply_markup=get_gemini_dialog_keyboard()
+        )
+        bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
+
     def get_user_query_and_choose_size(message, search_type):
         query = message.text
         bot.send_message(message.chat.id, "Выберите размер ответа:",
@@ -142,6 +170,46 @@ def setup_handlers(bot):
             handle_search_query(message, size, query, model_name)
         elif search_type == 'интернет':
             handle_internet_search_query(message, size, query, model_name)
+    
+    def handle_dialog(message, model_name): # Обработчик диалога
+      chat_id = message.chat.id
+      if message.text == '⏹️ Завершить диалог':
+          bot.send_message(
+              chat_id, "Диалог завершен.", reply_markup=get_gemini_keyboard()
+          )
+          if chat_id in dialog_sessions:
+                del dialog_sessions[chat_id]
+          return
+      elif message.text == '⬅️ Назад':
+           bot.send_message(
+                chat_id, "Возврат в главное меню.", reply_markup=get_gemini_keyboard()
+            )
+           if chat_id in dialog_sessions:
+                del dialog_sessions[chat_id]
+           return
+      else:
+        query = message.text
+
+        if chat_id not in dialog_sessions:
+          dialog_sessions[chat_id] = []
+          
+        dialog_sessions[chat_id].append({"role": "user", "parts": [query]})
+        
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(dialog_sessions[chat_id])
+            for part in response.parts:
+                formatted_part = format_bold_text(part.text)  # Форматируем каждую часть
+                bot.send_message(chat_id, formatted_part, parse_mode='HTML')
+            dialog_sessions[chat_id].append({"role":"model", "parts": [response.text]})
+            bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
+
+        except Exception as e:
+            bot.send_message(
+              chat_id,
+              f"Ошибка при выполнении запроса: {str(e)}"
+            )
+            return
 
     def handle_search_query(message, size, query, model_name):
         try:
@@ -154,7 +222,9 @@ def setup_handlers(bot):
 
             # Отправка ответа частями
             for part in response.parts:
-                bot.send_message(message.chat.id, part.text)
+                formatted_part = format_bold_text(part.text)  # Форматируем каждую часть
+                bot.send_message(message.chat.id, formatted_part, parse_mode='HTML')
+                time.sleep(0.5)  # Задержка в секундах для эффекта постепенной отправки
 
         except Exception as e:
             bot.send_message(
