@@ -1,5 +1,6 @@
 # bot_handlers.py
 import re
+import time
 import telebot
 from telebot import types
 import logging
@@ -38,7 +39,7 @@ def setup_handlers(bot):
     @bot.message_handler(func=lambda message: message.text == '⬅️ Назад')
     def back(message):
         global window_menu_active
-        window_menu_active = False # сбрасываем флаг при возврате
+        window_menu_active = False  # сбрасываем флаг при возврате
         bot.send_message(message.chat.id, "⬅️ Назад",
                          reply_markup=get_main_keyboard())
 
@@ -102,6 +103,11 @@ def setup_handlers(bot):
         # Сохраняем выбранную модель в объекте message
         message.model_name = model_name
 
+        bot.send_message(
+            message.chat.id, 
+            f"Вы выбрали: {model_name}.", 
+            reply_markup=types.ReplyKeyboardRemove()
+        )
         if search_type == 'обычный':
             bot.send_message(message.chat.id, "Введите запрос для поиска.")
             bot.register_next_step_handler(
@@ -140,32 +146,59 @@ def setup_handlers(bot):
     def handle_search_query(message, size, query, model_name):
         try:
             model = genai.GenerativeModel(model_name)
+
+            # Генерация ответа по частям
             response = model.generate_content(
                 f"Найди информацию {size}: {query}"
             )
-            response_text = "".join(part.text for part in response.parts)
-        except Exception as e:
-            response_text = f"Ошибка при выполнении поиска: {str(e)}"
 
-        formatted_text = format_bold_text(response_text)
-        bot.send_message(message.chat.id, formatted_text, parse_mode='HTML')
-        bot.send_message(message.chat.id, "Выберите следующее действие:",
-                         reply_markup=get_gemini_keyboard())
+            # Отправка ответа частями
+            for part in response.parts:
+                bot.send_message(message.chat.id, part.text)
+
+        except Exception as e:
+            bot.send_message(
+                message.chat.id, 
+                f"Ошибка при выполнении поиска: {str(e)}"
+            )
+            return
+
+        # После завершения отправки текста отправляем клавиатуру с действиями
+        bot.send_message(
+            message.chat.id, 
+            "Выберите следующее действие:", 
+            reply_markup=get_gemini_keyboard()
+        )
+
 
     def handle_internet_search_query(message, size, query, model_name):
         try:
             model = genai.GenerativeModel(model_name)
+
+            # Генерация ответа по частям
             response = model.generate_content(
                 f"Найди информацию в интернете {size}: {query}"
             )
-            response_text = "".join(part.text for part in response.parts)
-        except Exception as e:
-            response_text = f"Ошибка при выполнении поиска в интернете: {str(e)}"
 
-        formatted_text = format_bold_text(response_text)
-        bot.send_message(message.chat.id, formatted_text, parse_mode='HTML')
-        bot.send_message(message.chat.id, "Выберите следующее действие",
-                         reply_markup=get_gemini_keyboard())
+            # Отправка ответа частями с постепенной обработкой
+            for part in response.parts:
+                formatted_part = format_bold_text(part.text)  # Форматируем каждую часть
+                bot.send_message(message.chat.id, formatted_part, parse_mode='HTML')
+                time.sleep(0.5)  # Задержка в секундах для эффекта постепенной отправки
+
+        except Exception as e:
+            bot.send_message(
+                message.chat.id,
+                f"Ошибка при выполнении поиска в интернете: {str(e)}"
+            )
+            return
+
+        # После завершения отправки текста отправляем клавиатуру с действиями
+        bot.send_message(
+            message.chat.id,
+            "Выберите следующее действие:",
+            reply_markup=get_gemini_keyboard()
+        )
 
     def handle_open_folder(message):
         folder_path = message.text
@@ -215,23 +248,12 @@ def setup_handlers(bot):
             logger.error(f"Ошибка при отправке клавиатуры: {e}")
 
     def update_volume_keyboard(message):
-        global last_keyboard_message_id
         try:
-            if last_keyboard_message_id:
-                # Редактируем сообщение, обновляя только клавиатуру
-                bot.edit_message_reply_markup(
-                    chat_id=message.chat.id,
-                    message_id=last_keyboard_message_id,
-                    reply_markup=get_volume_keyboard(is_muted())
-                )
-            else:
-                # Если message_id не сохранен, отправляем новое сообщение
-                sent_message = bot.send_message(
-                    chat_id=message.chat.id,
-                    text="Управление громкостью",
-                    reply_markup=get_volume_keyboard(is_muted())
-                )
-                last_keyboard_message_id = sent_message.message_id
+            bot.send_message(
+                chat_id=message.chat.id,
+                text="Управление громкостью",
+                reply_markup=get_volume_keyboard(is_muted())
+            )
         except Exception as e:
             logger.error(f"Ошибка при обновлении клавиатуры: {e}")
 
@@ -368,4 +390,3 @@ def setup_handlers(bot):
         if score > 70:
             return POPULAR_SITES[closest_match]
         return None
-    
