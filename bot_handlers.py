@@ -18,7 +18,6 @@ from fuzzywuzzy import process
 from keyboards import get_gemini_model_keyboard, get_info_size_keyboard, get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
-
 last_keyboard_message_id = None
 
 logger = logging.getLogger(__name__)
@@ -38,6 +37,8 @@ def setup_handlers(bot):
 
     @bot.message_handler(func=lambda message: message.text == '⬅️ Назад')
     def back(message):
+        global window_menu_active
+        window_menu_active = False # сбрасываем флаг при возврате
         bot.send_message(message.chat.id, "⬅️ Назад",
                          reply_markup=get_main_keyboard())
 
@@ -69,12 +70,12 @@ def setup_handlers(bot):
     def handle_gemini_controls(message):
         action = message.text
         if action == '🔍 Поиск':
-            bot.send_message(message.chat.id, "Выберите модель:",
+            bot.send_message(message.chat.id, "Выберите модель",
                              reply_markup=get_gemini_model_keyboard())
             bot.register_next_step_handler(
                 message, handle_model_selection, search_type='обычный')
         elif action == '🔍 Поиск в интернете':
-            bot.send_message(message.chat.id, "Выберите модель:",
+            bot.send_message(message.chat.id, "Выберите модель",
                              reply_markup=get_gemini_model_keyboard())
             bot.register_next_step_handler(
                 message, handle_model_selection, search_type='интернет')
@@ -163,7 +164,7 @@ def setup_handlers(bot):
 
         formatted_text = format_bold_text(response_text)
         bot.send_message(message.chat.id, formatted_text, parse_mode='HTML')
-        bot.send_message(message.chat.id, "Выберите следующее действие:",
+        bot.send_message(message.chat.id, "Выберите следующее действие",
                          reply_markup=get_gemini_keyboard())
 
     def handle_open_folder(message):
@@ -174,7 +175,7 @@ def setup_handlers(bot):
         else:
             bot.send_message(
                 message.chat.id, "Папка не найдена. Пожалуйста, проверьте путь.")
-        bot.send_message(message.chat.id, "Выберите следующее действие:",
+        bot.send_message(message.chat.id, "Выберите следующее действие",
                          reply_markup=get_gemini_keyboard())
 
     @bot.message_handler(func=lambda message: message.text in ['⏯️ Пауза / ⏸️ Воспроизведение', '▶️ Перемотать вперед', '◀️ Перемотать назад'])
@@ -367,3 +368,4 @@ def setup_handlers(bot):
         if score > 70:
             return POPULAR_SITES[closest_match]
         return None
+    

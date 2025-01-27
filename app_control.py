@@ -1,5 +1,3 @@
-# app_control.py
-
 import os
 import subprocess
 import webbrowser
