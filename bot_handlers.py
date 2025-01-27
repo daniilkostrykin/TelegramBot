@@ -426,9 +426,6 @@ def setup_handlers(bot):
                 task_name = "RunAppAsAdmin"  # Имя задачи в Планировщике задач
                 if open_link(query, task_name=task_name):
                     return  # Завершаем функцию, если все успешно
-            else:
-                bot.send_message(
-                    message.chat.id, "Не удалось запустить YouTube через задачу планировщика.")
             if closest_app:
                 if open_application(query):
                     bot.send_message(message.chat.id, "Открываю приложение...")
