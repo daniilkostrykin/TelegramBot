@@ -425,7 +425,8 @@ def setup_handlers(bot):
             if "youtube" in query or "ютуб" in query:
                 task_name = "RunAppAsAdmin"  # Имя задачи в Планировщике задач
                 if open_link(query, task_name=task_name):
-                    return  # Завершаем функцию, если все успешно
+                    bot.send_message(message.chat.id, f"Открываю {query}...")
+                    return 
             if closest_app:
                 if open_application(query):
                     bot.send_message(message.chat.id, "Открываю приложение...")
