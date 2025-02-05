@@ -35,21 +35,13 @@ def get_computer_keyboard():
     full_screen_button = types.KeyboardButton('📺 На весь экран')
     mouse_button = types.KeyboardButton('🖱️ Мышь')
     volume_button = types.KeyboardButton('🔊 Громкость')
+    open_button = types.KeyboardButton('📂 Открыть папку')
     back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(off_button, restart_button, chrome_button)
-    markup.add(open_site_button, full_screen_button, mouse_button, volume_button)
+    markup.add(open_site_button, full_screen_button, mouse_button, volume_button, open_button)
     markup.add(back_button)
     return markup
 
-def get_gemini_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    search_button = types.KeyboardButton('🔍 Запрос')
-    dialog_button = types.KeyboardButton('💬 Диалог')
-    open_button = types.KeyboardButton('📂 Открыть папку')
-    back_button = types.KeyboardButton('⬅️ Назад')
-    markup.add(search_button, dialog_button)
-    markup.add(open_button, back_button)
-    return markup
 
 def get_dialog_keyboard(): # Клавиатура для режима диалога
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -62,16 +54,15 @@ def get_ai_selection_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     keyboard.add(types.KeyboardButton("ChatGPT"))
     keyboard.add(types.KeyboardButton("Gemini"))
-    keyboard.add(types.KeyboardButton("G4F")) # Добавлена кнопка G4F
+    keyboard.add(types.KeyboardButton("G4F (Аналог ChatGPT)")) # Добавлена кнопка G4F
     keyboard.add(types.KeyboardButton("⬅️ Назад"))
     return keyboard
 
 def get_g4f_model_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    model_1_button = types.KeyboardButton('gpt-4o-mini')
-    model_2_button = types.KeyboardButton('gpt-3.5-turbo')
+    model_1_button = types.KeyboardButton('GPT 4o mini')
     back_button = types.KeyboardButton('⬅️ Назад')
-    markup.add(model_1_button, model_2_button)
+    markup.add(model_1_button)
     markup.add(back_button)
     return markup
 
@@ -87,8 +78,14 @@ def get_gemini_model_keyboard():
     model_1_button = types.KeyboardButton('Gemini 2.0 Experimental')
     model_2_button = types.KeyboardButton('Gemini 1.5 Pro')
     model_3_button = types.KeyboardButton('Gemini 1.5 Flash')
+    model_4_button = types.KeyboardButton('Gemini 2.0 Pro Experimental 02-05') 
+    model_5_button = types.KeyboardButton('Gemini 2.0 Flash Thinking Experimental 01-21') 
+    model_6_button = types.KeyboardButton('Gemini 2.0 Flash-Lite Preview 02-05') 
+    model_7_button = types.KeyboardButton('Gemini 2.0 Flash') 
     back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(model_1_button, model_2_button, model_3_button)
+    markup.add(model_4_button, model_5_button, model_6_button)
+    markup.add(model_7_button)
     markup.add(back_button)
     return markup
 

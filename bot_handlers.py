@@ -8,17 +8,13 @@ import webbrowser
 import subprocess
 import pyautogui
 import os
-import requests
 import pygetwindow as gw
-from config import POPULAR_SITES, TRANSLATIONS
-from pywinauto import Application, findwindows
-from openai import OpenAI
+from config import POPULAR_SITES
 import google.generativeai as genai
 from config import GEMINI_API_KEY, BOT_TOKEN
 from fuzzywuzzy import process
-from keyboards import get_gemini_model_keyboard, get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard, get_dialog_keyboard
+from keyboards import get_gemini_model_keyboard, get_gemini_model_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard, get_dialog_keyboard
 from keyboards import get_ai_selection_keyboard, get_g4f_model_keyboard
-
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
 from g4f.client import Client
@@ -29,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 genai.configure(api_key=GEMINI_API_KEY)
 dialog_sessions = {}  # Словарь для хранения истории диалогов
+g4f_dialog_sessions = {}
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -60,11 +57,6 @@ def setup_handlers(bot):
         bot.send_message(message.chat.id, "Управление компьютером",
                          reply_markup=get_computer_keyboard())
 
-    @bot.message_handler(func=lambda message: message.text == 'Gemini')
-    def handle_gemini(message):
-        bot.send_message(message.chat.id, "Gemini",
-                         reply_markup=get_gemini_keyboard())
-
     def format_bold_text(text):
         """Форматирует текст, заменяя **текст** на жирный."""
         def replace_bold(match):
@@ -80,7 +72,6 @@ def setup_handlers(bot):
         def __init__(self):
             self.client = Client()
             self.messages = []
-            self.model_name = "gpt-3.5-turbo"  # Модель по умолчанию
 
         def set_model(self, model_name):
             """Устанавливает модель для G4F"""
@@ -120,23 +111,18 @@ def setup_handlers(bot):
         bot.send_message(message.chat.id, "Выберите AI:",
                          reply_markup=get_ai_selection_keyboard())
 
-    @bot.message_handler(func=lambda message: message.text == 'Gemini')
-    def handle_gemini(message):
-        bot.send_message(message.chat.id, "Gemini",
-                         reply_markup=get_gemini_keyboard())
-
-    @bot.message_handler(func=lambda message: message.text == '🤖 Выбор AI' or message.text == '⬅️ Назад')
+    @bot.message_handler(func=lambda message: message.text == '🤖 Выбор AI')
     def choose_ai(message):
         bot.send_message(message.chat.id, "Выберите AI:",
                          reply_markup=get_ai_selection_keyboard())
 
-    @bot.message_handler(func=lambda message: message.text in ['ChatGPT', 'Gemini', 'G4F'])
+    @bot.message_handler(func=lambda message: message.text in ['ChatGPT', 'Gemini', 'G4F (Аналог ChatGPT)'])
     def handle_ai_choice(message):
         if message.text == 'Gemini':
             bot.send_message(message.chat.id, "Вы выбрали Gemini.",
                              reply_markup=get_gemini_model_keyboard())
             bot.register_next_step_handler(message, handle_model_selection)
-        elif message.text == 'G4F':
+        elif message.text == 'G4F (Аналог ChatGPT)':
             bot.send_message(message.chat.id, "Вы выбрали G4F. Выберите модель:",
                              reply_markup=get_g4f_model_keyboard())
             bot.register_next_step_handler(message, handle_g4f_model_selection)
@@ -148,13 +134,21 @@ def setup_handlers(bot):
                 message.chat.id, "Возврат в главное меню.", reply_markup=get_main_keyboard())
 
     def handle_g4f_model_selection(message):
-        if message.text in ['gpt-4o-mini', 'gpt-3.5-turbo']:
-            g4f_bot.set_model(message.text)
-            bot.send_message(message.chat.id, f"Вы выбрали {
-                             message.text}. Введите ваш запрос:")
-            bot.register_next_step_handler(message, handle_g4f_query)
-        elif message.text == '⬅️ Назад':
+        if message.text == '⬅️ Назад':
             choose_ai(message)
+            return
+
+        model_mapping = {
+            'GPT 4o mini': 'gpt-4o-mini',
+        }
+
+        model_name = model_mapping.get(message.text)
+
+        if model_name:
+            g4f_bot.set_model(model_name)
+            bot.send_message(message.chat.id, f"Вы выбрали {model_name}. Введите ваш запрос:",
+                             reply_markup=get_dialog_keyboard())
+            bot.register_next_step_handler(message, handle_g4f_dialog)
         else:
             bot.send_message(
                 message.chat.id, "Неверный выбор модели. Попробуйте снова.")
@@ -170,21 +164,53 @@ def setup_handlers(bot):
         except Exception as e:
             bot.send_message(message.chat.id, f"Ошибка: {str(e)}")
 
-    @bot.message_handler(func=lambda message: message.text in ['🔍 Запрос', '💬 Диалог', '📂 Открыть папку', '⬅️ Назад'])
-    def handle_gemini_controls(message):
+    @bot.message_handler(func=lambda message: message.text == '📂 Открыть папку')
+    def open_folder(message):
         action = message.text
-        if action == '🔍 Запрос':
-            bot.send_message(message.chat.id, "Выберите модель",
-                             reply_markup=get_gemini_model_keyboard())
-            bot.register_next_step_handler(message, handle_model_selection)
-        elif action == '💬 Диалог':
-            bot.send_message(message.chat.id, "Выберите модель для диалога",
-                             reply_markup=get_gemini_model_keyboard())
-            bot.register_next_step_handler(
-                message, handle_model_selection_dialog)
-        elif action == '📂 Открыть папку':
+        if action == '📂 Открыть папку':
             bot.send_message(message.chat.id, "Введите путь к папке.")
             bot.register_next_step_handler(message, handle_open_folder)
+
+    def handle_g4f_dialog(message):
+        chat_id = message.chat.id
+
+        if message.text == '⏹️ Завершить диалог':
+            bot.send_message(chat_id, "Диалог завершен.",
+                             reply_markup=get_g4f_model_keyboard())
+            if chat_id in g4f_dialog_sessions:
+                del g4f_dialog_sessions[chat_id]
+            return
+
+        elif message.text == '⬅️ Назад':
+            bot.send_message(chat_id, "Возврат в главное меню.",
+                             reply_markup=get_ai_selection_keyboard())
+            if chat_id in g4f_dialog_sessions:
+                del g4f_dialog_sessions[chat_id]
+            return
+
+        else:
+            query = message.text
+
+            if chat_id not in g4f_dialog_sessions:
+                g4f_dialog_sessions[chat_id] = []
+
+            g4f_dialog_sessions[chat_id].append(
+                {"role": "user", "content": query})
+
+            try:
+                response = g4f_bot.ask(query)
+
+                formatted_response = format_bold_text(response)
+                bot.send_message(chat_id, formatted_response,
+                                 parse_mode='HTML')
+
+                g4f_dialog_sessions[chat_id].append(
+                    {"role": "assistant", "content": response})
+
+                bot.register_next_step_handler(message, handle_g4f_dialog)
+
+            except Exception as e:
+                bot.send_message(chat_id, f"Ошибка: {str(e)}")
 
     def handle_model_selection(message):
         if message.text == 'Gemini 2.0 Experimental':
@@ -193,38 +219,17 @@ def setup_handlers(bot):
             model_name = 'gemini-1.5-pro'
         elif message.text == 'Gemini 1.5 Flash':
             model_name = 'gemini-1.5-flash'
+        elif message.text == 'Gemini 2.0 Pro Experimental 02-05':
+            model_name = 'gemini-2.0-pro-exp-02-05'
+        elif message.text == 'Gemini 2.0 Flash Thinking Experimental 01-21':
+            model_name = 'gemini-2.0-flash-thinking-exp-01-21'
+        elif message.text == 'Gemini 2.0 Flash-Lite Preview 02-05':
+            model_name = 'gemini-2.0-flash-lite-preview-02-05'
+        elif message.text == 'Gemini 2.0 Flash':
+            model_name = 'gemini-2.0-flash'
         elif message.text == '⬅️ Назад':
             bot.send_message(
-                message.chat.id, "Возврат в главное меню.", reply_markup=get_gemini_keyboard())
-            return
-        else:
-            bot.send_message(
-                message.chat.id, "Неверный выбор модели. Попробуйте снова.")
-            return
-
-        # Сохраняем выбранную модель в объекте message
-        message.model_name = model_name
-
-        bot.send_message(
-            message.chat.id,
-            f"Вы выбрали: {model_name}.",
-            reply_markup=types.ReplyKeyboardRemove()
-        )
-        bot.send_message(message.chat.id, "Введите запрос.")
-        bot.register_next_step_handler(
-            message, handle_search_query, model_name=model_name)
-
-    # Обработчик выбора модели для диалога
-    def handle_model_selection_dialog(message):
-        if message.text == 'Gemini 2.0 Experimental':
-            model_name = 'gemini-2.0-flash-exp'
-        elif message.text == 'Gemini 1.5 Pro':
-            model_name = 'gemini-1.5-pro'
-        elif message.text == 'Gemini 1.5 Flash':
-            model_name = 'gemini-1.5-flash'
-        elif message.text == '⬅️ Назад':
-            bot.send_message(
-                message.chat.id, "Возврат в главное меню.", reply_markup=get_gemini_keyboard())
+                message.chat.id, "Возврат в главное меню.", reply_markup=get_gemini_model_keyboard())
             return
         else:
             bot.send_message(
@@ -239,50 +244,18 @@ def setup_handlers(bot):
         bot.register_next_step_handler(
             message, handle_dialog, model_name=model_name)
 
-    def handle_search_query(message, model_name):
-        try:
-            model = genai.GenerativeModel(model_name)
-
-            # Генерация ответа по частям
-            response = model.generate_content(
-                f"{message.text}"
-            )
-
-            # Отправка ответа частями
-            for part in response.parts:
-                formatted_part = format_bold_text(
-                    part.text)  # Форматируем каждую часть
-                bot.send_message(
-                    message.chat.id, formatted_part, parse_mode='HTML')
-                # Задержка в секундах для эффекта постепенной отправки
-                time.sleep(0.5)
-
-        except Exception as e:
-            bot.send_message(
-                message.chat.id,
-                f"Ошибка при выполнении поиска: {str(e)}"
-            )
-            return
-
-        # После завершения отправки текста отправляем клавиатуру с действиями
-        bot.send_message(
-            message.chat.id,
-            "Выберите следующее действие:",
-            reply_markup=get_gemini_keyboard()
-        )
-
     def handle_dialog(message, model_name):  # Обработчик диалога
         chat_id = message.chat.id
         if message.text == '⏹️ Завершить диалог':
             bot.send_message(
-                chat_id, "Диалог завершен.", reply_markup=get_gemini_keyboard()
+                chat_id, "Диалог завершен.", reply_markup=get_gemini_model_keyboard()
             )
             if chat_id in dialog_sessions:
                 del dialog_sessions[chat_id]
             return
         elif message.text == '⬅️ Назад':
             bot.send_message(
-                chat_id, "Возврат в главное меню.", reply_markup=get_gemini_keyboard()
+                chat_id, "Возврат в главное меню.", reply_markup=get_gemini_model_keyboard()
             )
             if chat_id in dialog_sessions:
                 del dialog_sessions[chat_id]
@@ -309,6 +282,8 @@ def setup_handlers(bot):
                     message, handle_dialog, model_name=model_name)
 
             except Exception as e:
+                logger.error(f"Ошибка при вызове API Gemini: {e}") # Добавлено логирование
+
                 bot.send_message(
                     chat_id,
                     f"Ошибка при выполнении запроса: {str(e)}"
@@ -324,7 +299,7 @@ def setup_handlers(bot):
             bot.send_message(
                 message.chat.id, "Папка не найдена. Пожалуйста, проверьте путь.")
         bot.send_message(message.chat.id, "Выберите следующее действие",
-                         reply_markup=get_gemini_keyboard())
+                         reply_markup=get_gemini_model_keyboard())
 
     @bot.message_handler(func=lambda message: message.text in ['⏯️ Пауза / ⏸️ Воспроизведение', '▶️ Перемотать вперед', '◀️ Перемотать назад'])
     def handle_video_controls(message):
