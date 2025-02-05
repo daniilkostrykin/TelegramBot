@@ -52,9 +52,8 @@ def get_dialog_keyboard(): # Клавиатура для режима диало
 
 def get_ai_selection_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(types.KeyboardButton("ChatGPT"))
-    keyboard.add(types.KeyboardButton("Gemini"))
-    keyboard.add(types.KeyboardButton("G4F (Аналог ChatGPT)")) # Добавлена кнопка G4F
+    keyboard.add(types.KeyboardButton("ChatGPT"), types.KeyboardButton("Gemini"), types.KeyboardButton("G4F (Аналог ChatGPT)"))
+    keyboard.add(types.KeyboardButton("Midjourney"))
     keyboard.add(types.KeyboardButton("⬅️ Назад"))
     return keyboard
 

@@ -1,6 +1,8 @@
 # bot_handlers.py
 import re
+import threading
 import time
+import requests
 import telebot
 from telebot import types
 import logging
@@ -18,6 +20,8 @@ from keyboards import get_ai_selection_keyboard, get_g4f_model_keyboard
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
 from g4f.client import Client
+from deep_translator import GoogleTranslator
+from telebot.types import Message
 
 last_keyboard_message_id = None
 
@@ -172,23 +176,27 @@ def setup_handlers(bot):
         if action == '📂 Открыть папку':
             bot.send_message(message.chat.id, "Введите путь к папке.")
             bot.register_next_step_handler(message, handle_open_folder)
+
     @bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
     def stop_generation(call):
         chat_id = int(call.data.split("_")[1])
         active_generations[chat_id] = False
-        bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, call.message.message_id)
+        bot.edit_message_text("⏹️ Генерация остановлена.",
+                              chat_id, call.message.message_id)
 
     def handle_g4f_dialog(message):
         chat_id = message.chat.id
 
         if message.text == '⏹️ Завершить диалог':
-            bot.send_message(chat_id, "Диалог завершен.", reply_markup=get_g4f_model_keyboard())
+            bot.send_message(chat_id, "Диалог завершен.",
+                             reply_markup=get_g4f_model_keyboard())
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
             return
 
         elif message.text == '⬅️ Назад':
-            bot.send_message(chat_id, "Возврат в главное меню.", reply_markup=get_ai_selection_keyboard())
+            bot.send_message(chat_id, "Возврат в главное меню.",
+                             reply_markup=get_ai_selection_keyboard())
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
             return
@@ -202,10 +210,12 @@ def setup_handlers(bot):
 
         # Отправляем пустое сообщение с кнопкой "Stop"
         markup = types.InlineKeyboardMarkup()
-        stop_button = types.InlineKeyboardButton("⏹️ Stop", callback_data=f"stop_{chat_id}")
+        stop_button = types.InlineKeyboardButton(
+            "⏹️ Stop", callback_data=f"stop_{chat_id}")
         markup.add(stop_button)
-        
-        sent_message = bot.send_message(chat_id, "Генерация ответа...", reply_markup=markup)
+
+        sent_message = bot.send_message(
+            chat_id, "Генерация ответа...", reply_markup=markup)
 
         active_generations[chat_id] = True  # Помечаем генерацию активной
 
@@ -218,23 +228,29 @@ def setup_handlers(bot):
             generated_text = ""
 
             for i in range(0, len(response_text), max_length):
-                if not active_generations.get(chat_id, False):  # Если нажали "Stop"
-                    bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
+                # Если нажали "Stop"
+                if not active_generations.get(chat_id, False):
+                    bot.edit_message_text(
+                        "⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
                     return
-                
+
                 chunk = response_text[i:i + max_length]
                 generated_text += chunk
                 formatted_chunk = format_bold_text(generated_text)
 
                 # Редактируем предыдущее сообщение
-                bot.edit_message_text(formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
-                time.sleep(0.5)  # Даем время для редактирования, чтобы избежать флуда
+                bot.edit_message_text(
+                    formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
+                # Даем время для редактирования, чтобы избежать флуда
+                time.sleep(0.5)
 
             # Добавляем ответ в историю
-            g4f_dialog_sessions[chat_id].append({"role": "assistant", "content": response_text})
+            g4f_dialog_sessions[chat_id].append(
+                {"role": "assistant", "content": response_text})
 
             # Убираем кнопку Stop после завершения
-            bot.edit_message_reply_markup(chat_id, sent_message.message_id, reply_markup=None)
+            bot.edit_message_reply_markup(
+                chat_id, sent_message.message_id, reply_markup=None)
 
             bot.register_next_step_handler(message, handle_g4f_dialog)
 
@@ -277,13 +293,15 @@ def setup_handlers(bot):
         chat_id = message.chat.id
 
         if message.text == '⏹️ Завершить диалог':
-            bot.send_message(chat_id, "Диалог завершен.", reply_markup=get_gemini_model_keyboard())
+            bot.send_message(chat_id, "Диалог завершен.",
+                             reply_markup=get_gemini_model_keyboard())
             if chat_id in dialog_sessions:
                 del dialog_sessions[chat_id]
             return
 
         elif message.text == '⬅️ Назад':
-            bot.send_message(chat_id, "Возврат в главное меню.", reply_markup=get_gemini_model_keyboard())
+            bot.send_message(chat_id, "Возврат в главное меню.",
+                             reply_markup=get_gemini_model_keyboard())
             if chat_id in dialog_sessions:
                 del dialog_sessions[chat_id]
             return
@@ -297,10 +315,12 @@ def setup_handlers(bot):
 
         # Кнопка "Stop"
         markup = types.InlineKeyboardMarkup()
-        stop_button = types.InlineKeyboardButton("⏹️ Stop", callback_data=f"stop_{chat_id}")
+        stop_button = types.InlineKeyboardButton(
+            "⏹️ Stop", callback_data=f"stop_{chat_id}")
         markup.add(stop_button)
 
-        sent_message = bot.send_message(chat_id, "Генерация ответа...", reply_markup=markup)
+        sent_message = bot.send_message(
+            chat_id, "Генерация ответа...", reply_markup=markup)
         active_generations[chat_id] = True
 
         try:
@@ -312,25 +332,102 @@ def setup_handlers(bot):
             generated_text = ""
 
             for i in range(0, len(response_text), max_length):
-                if not active_generations.get(chat_id, False):  # Проверяем, остановлена ли генерация
-                    bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
+                # Проверяем, остановлена ли генерация
+                if not active_generations.get(chat_id, False):
+                    bot.edit_message_text(
+                        "⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
                     return
 
                 chunk = response_text[i:i + max_length]
                 generated_text += chunk
                 formatted_chunk = format_bold_text(generated_text)
 
-                bot.edit_message_text(formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
+                bot.edit_message_text(
+                    formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
                 time.sleep(0.5)
 
-            dialog_sessions[chat_id].append({"role": "model", "parts": [response_text]})
-            bot.edit_message_reply_markup(chat_id, sent_message.message_id, reply_markup=None)
+            dialog_sessions[chat_id].append(
+                {"role": "model", "parts": [response_text]})
+            bot.edit_message_reply_markup(
+                chat_id, sent_message.message_id, reply_markup=None)
 
-            bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
+            bot.register_next_step_handler(
+                message, handle_dialog, model_name=model_name)
 
         except Exception as e:
             bot.send_message(chat_id, f"Ошибка: {str(e)}")
+
+
+    def translate_text(text, target_lang="en"):
+        return GoogleTranslator(source="auto", target=target_lang).translate(text)
+
+    @bot.message_handler(func=lambda message: message.text == 'Midjourney')
+    def handle_midjourney_choice(message):
+        bot.send_message(
+            message.chat.id, "Вы выбрали Midjourney. Введите запрос для генерации изображения."
+        )
+        bot.register_next_step_handler(message, handle_midjourney)
+
+    def handle_midjourney(message: Message):
+        translated_text = translate_text(message.text)
+
+        # Отправляем сообщение с анимацией загрузки
+        loading_message = bot.send_message(
+            message.chat.id, "Генерация картинки."
+        )
+
+        # Запускаем поток для обновления анимации
+        stop_event = threading.Event()
+        loading_thread = threading.Thread(target=update_loading_message, args=(bot, loading_message, stop_event))
+        loading_thread.start()
+
+        start_time = time.time()  # Засекаем время начала генерации
+
+        # 🖼️ Запрос к API для генерации картинки
+        client = Client()
+        response = client.images.generate(
+            model="flux",
+            prompt=translated_text,
+            response_format="url"
+        )
+
+        image_url = response.data[0].url
+        image_data = requests.get(image_url).content
+
+        stop_event.set()  # Останавливаем анимацию
+        loading_thread.join()  # Ждём завершения потока
+
+        # 🕒 Подсчёт времени генерации
+        elapsed_time = round(time.time() - start_time, 2)
+
+        # Отправляем картинку вместо загрузочного сообщения
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=loading_message.message_id,
+            text=f"✅ Картинка сгенерирована за {elapsed_time} сек!"
+        )
+        bot.send_photo(message.chat.id, photo=image_data)
+
+    def update_loading_message(bot, message, stop_event):
+        dots = ""
+        counter = 0
+
+        while not stop_event.is_set():
+            dots = "." * (counter % 4)  # Меняем количество точек от 0 до 3
+            elapsed_time = counter  # Время в секундах
+            new_text = f"Генерация картинки{dots}\nГенерируется лишь: {elapsed_time} сек"
             
+            try:
+                bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=message.message_id,
+                    text=new_text
+                )
+            except Exception:
+                pass  # Если сообщение уже изменено, просто пропускаем
+
+            counter += 1
+            time.sleep(1)
 
 
     def handle_open_folder(message):

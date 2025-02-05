@@ -4,7 +4,7 @@ client = Client()
 response = client.images.generate(
     model="flux",
     prompt="a white siamese cat",
-    response_format="url"
+    response_format="img"
 )
 
 print(f"Generated image URL: {response.data[0].url}")

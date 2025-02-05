@@ -79,7 +79,7 @@ root = tk.Tk()
 root.title("Telegram Bot")
 root.geometry("300x60")
 root.configure(bg="black")
-
+root.attributes('-topmost', True)
 label = tk.Label(
     root,
     text="Бот запущен. Закройте окно, чтобы остановить бота.",
