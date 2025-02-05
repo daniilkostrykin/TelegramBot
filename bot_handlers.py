@@ -16,7 +16,7 @@ from openai import OpenAI
 import google.generativeai as genai
 from config import GEMINI_API_KEY, BOT_TOKEN
 from fuzzywuzzy import process
-from keyboards import get_gemini_model_keyboard, get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard, get_gemini_dialog_keyboard
+from keyboards import get_gemini_model_keyboard, get_gemini_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard, get_dialog_keyboard
 from keyboards import get_ai_selection_keyboard, get_g4f_model_keyboard
 
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
@@ -114,22 +114,6 @@ def setup_handlers(bot):
         formatted_text = re.sub(
             r'\*\*(.*?)\*\*', replace_bold, text, flags=re.DOTALL)
         return formatted_text
-
-    # --- Обработчики сообщений ---
-    @bot.message_handler(commands=['start', 'help'])
-    def send_welcome(message):
-        bot.reply_to(message, "Привет! Выберите действие:",
-                     reply_markup=get_main_keyboard())
-
-    @bot.message_handler(func=lambda message: message.text == 'Видео')
-    def handle_video(message):
-        bot.send_message(message.chat.id, "Управление видео:",
-                         reply_markup=get_video_keyboard())
-
-    @bot.message_handler(func=lambda message: message.text == 'Компьютер')
-    def handle_computer(message):
-        bot.send_message(message.chat.id, "Управление компьютером:",
-                         reply_markup=get_computer_keyboard())
 
     @bot.message_handler(func=lambda message: message.text == 'Нейросети')
     def handle_ai(message):
@@ -250,7 +234,7 @@ def setup_handlers(bot):
         bot.send_message(
             message.chat.id,
             f"Вы выбрали: {model_name}. Начните диалог.",
-            reply_markup=get_gemini_dialog_keyboard()
+            reply_markup=get_dialog_keyboard()
         )
         bot.register_next_step_handler(
             message, handle_dialog, model_name=model_name)

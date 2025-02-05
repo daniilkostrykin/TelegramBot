@@ -45,14 +45,13 @@ def get_gemini_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     search_button = types.KeyboardButton('🔍 Запрос')
     dialog_button = types.KeyboardButton('💬 Диалог')
-    search_internet_button = types.KeyboardButton('🔍 Поиск в интернете')
     open_button = types.KeyboardButton('📂 Открыть папку')
     back_button = types.KeyboardButton('⬅️ Назад')
-    markup.add(search_button, dialog_button, search_internet_button)
+    markup.add(search_button, dialog_button)
     markup.add(open_button, back_button)
     return markup
 
-def get_gemini_dialog_keyboard(): # Клавиатура для режима диалога
+def get_dialog_keyboard(): # Клавиатура для режима диалога
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     end_dialog_button = types.KeyboardButton('⏹️ Завершить диалог')
     back_button = types.KeyboardButton('⬅️ Назад')
