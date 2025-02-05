@@ -2,12 +2,14 @@
 
 from telebot import types
 
+
+# --- Клавиатуры (keyboard.py) ---
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     video_button = types.KeyboardButton('Видео')
     computer_button = types.KeyboardButton('Компьютер')
-    gemini_button = types.KeyboardButton('Gemini')
-    markup.row(video_button, computer_button, gemini_button)
+    ai_button = types.KeyboardButton('Нейросети')
+    markup.row(video_button, computer_button, ai_button)
     return markup
 
 def get_video_keyboard():
@@ -57,6 +59,30 @@ def get_gemini_dialog_keyboard(): # Клавиатура для режима д�
     markup.add(end_dialog_button, back_button)
     return markup
 
+def get_ai_selection_keyboard():
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(types.KeyboardButton("ChatGPT"))
+    keyboard.add(types.KeyboardButton("Gemini"))
+    keyboard.add(types.KeyboardButton("G4F")) # Добавлена кнопка G4F
+    keyboard.add(types.KeyboardButton("⬅️ Назад"))
+    return keyboard
+
+def get_g4f_model_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    model_1_button = types.KeyboardButton('gpt-4o-mini')
+    model_2_button = types.KeyboardButton('gpt-3.5-turbo')
+    back_button = types.KeyboardButton('⬅️ Назад')
+    markup.add(model_1_button, model_2_button)
+    markup.add(back_button)
+    return markup
+
+def get_gpt_dialog_keyboard(): # Клавиатура для режима диалога
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    end_dialog_button = types.KeyboardButton('⏹️ Завершить диалог')
+    back_button = types.KeyboardButton('⬅️ Назад')
+    markup.add(end_dialog_button, back_button)
+    return markup
+
 def get_gemini_model_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     model_1_button = types.KeyboardButton('Gemini 2.0 Experimental')
@@ -65,13 +91,6 @@ def get_gemini_model_keyboard():
     back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(model_1_button, model_2_button, model_3_button)
     markup.add(back_button)
-    return markup
-
-def get_info_size_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    short_button = types.KeyboardButton('📏 Кратко')
-    long_button = types.KeyboardButton('📐 Подробно')
-    markup.add(short_button, long_button)
     return markup
 
 def get_mouse_keyboard():
