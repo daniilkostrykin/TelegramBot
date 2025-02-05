@@ -268,28 +268,33 @@ def setup_handlers(bot):
 
             dialog_sessions[chat_id].append({"role": "user", "parts": [query]})
 
-            try:
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content(dialog_sessions[chat_id])
-                for part in response.parts:
-                    formatted_part = format_bold_text(
-                        part.text)  # Форматируем каждую часть
-                    bot.send_message(chat_id, formatted_part,
-                                     parse_mode='HTML')
-                dialog_sessions[chat_id].append(
-                    {"role": "model", "parts": [response.text]})
-                bot.register_next_step_handler(
-                    message, handle_dialog, model_name=model_name)
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(dialog_sessions[chat_id])
 
-            except Exception as e:
-                logger.error(f"Ошибка при вызове API Gemini: {e}") # Добавлено логирование
+            # Разделение ответа на части и отправка
+            response_text = response.text
+            max_length = 4000  # Максимальная длина сообщения Telegram
+            for i in range(0, len(response_text), max_length):
+                chunk = response_text[i:i + max_length]
+                formatted_chunk = format_bold_text(chunk)
+                bot.send_message(chat_id, formatted_chunk, parse_mode='HTML')
+                time.sleep(0.3)  # Небольшая задержка для избежания флуда
 
-                bot.send_message(
-                    chat_id,
-                    f"Ошибка при выполнении запроса: {str(e)}"
-                )
-                return
+            dialog_sessions[chat_id].append(
+                {"role": "model", "parts": [response_text]})  # Сохраняем полный ответ
 
+            bot.register_next_step_handler(
+                message, handle_dialog, model_name=model_name)
+
+        except Exception as e:
+            logger.error(f"Ошибка при вызове API Gemini: {e}")
+            bot.send_message(
+                chat_id,
+                f"Ошибка при выполнении запроса: {str(e)}"
+            )
+            return
+        
     def handle_open_folder(message):
         folder_path = message.text
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
