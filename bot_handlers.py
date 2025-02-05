@@ -24,8 +24,10 @@ last_keyboard_message_id = None
 logger = logging.getLogger(__name__)
 
 genai.configure(api_key=GEMINI_API_KEY)
+
 dialog_sessions = {}  # Словарь для хранения истории диалогов
 g4f_dialog_sessions = {}
+active_generations = {}  # Словарь для отслеживания генерации сообщений
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -170,47 +172,74 @@ def setup_handlers(bot):
         if action == '📂 Открыть папку':
             bot.send_message(message.chat.id, "Введите путь к папке.")
             bot.register_next_step_handler(message, handle_open_folder)
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
+    def stop_generation(call):
+        chat_id = int(call.data.split("_")[1])
+        active_generations[chat_id] = False
+        bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, call.message.message_id)
 
     def handle_g4f_dialog(message):
         chat_id = message.chat.id
 
         if message.text == '⏹️ Завершить диалог':
-            bot.send_message(chat_id, "Диалог завершен.",
-                             reply_markup=get_g4f_model_keyboard())
+            bot.send_message(chat_id, "Диалог завершен.", reply_markup=get_g4f_model_keyboard())
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
             return
 
         elif message.text == '⬅️ Назад':
-            bot.send_message(chat_id, "Возврат в главное меню.",
-                             reply_markup=get_ai_selection_keyboard())
+            bot.send_message(chat_id, "Возврат в главное меню.", reply_markup=get_ai_selection_keyboard())
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
             return
 
-        else:
-            query = message.text
+        query = message.text
 
-            if chat_id not in g4f_dialog_sessions:
-                g4f_dialog_sessions[chat_id] = []
+        if chat_id not in g4f_dialog_sessions:
+            g4f_dialog_sessions[chat_id] = []
 
-            g4f_dialog_sessions[chat_id].append(
-                {"role": "user", "content": query})
+        g4f_dialog_sessions[chat_id].append({"role": "user", "content": query})
 
-            try:
-                response = g4f_bot.ask(query)
+        # Отправляем пустое сообщение с кнопкой "Stop"
+        markup = types.InlineKeyboardMarkup()
+        stop_button = types.InlineKeyboardButton("⏹️ Stop", callback_data=f"stop_{chat_id}")
+        markup.add(stop_button)
+        
+        sent_message = bot.send_message(chat_id, "Генерация ответа...", reply_markup=markup)
 
-                formatted_response = format_bold_text(response)
-                bot.send_message(chat_id, formatted_response,
-                                 parse_mode='HTML')
+        active_generations[chat_id] = True  # Помечаем генерацию активной
 
-                g4f_dialog_sessions[chat_id].append(
-                    {"role": "assistant", "content": response})
+        try:
+            response = g4f_bot.ask(query)
 
-                bot.register_next_step_handler(message, handle_g4f_dialog)
+            # Постепенная отправка текста
+            response_text = response
+            max_length = 4000  # Telegram ограничение
+            generated_text = ""
 
-            except Exception as e:
-                bot.send_message(chat_id, f"Ошибка: {str(e)}")
+            for i in range(0, len(response_text), max_length):
+                if not active_generations.get(chat_id, False):  # Если нажали "Stop"
+                    bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
+                    return
+                
+                chunk = response_text[i:i + max_length]
+                generated_text += chunk
+                formatted_chunk = format_bold_text(generated_text)
+
+                # Редактируем предыдущее сообщение
+                bot.edit_message_text(formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
+                time.sleep(0.5)  # Даем время для редактирования, чтобы избежать флуда
+
+            # Добавляем ответ в историю
+            g4f_dialog_sessions[chat_id].append({"role": "assistant", "content": response_text})
+
+            # Убираем кнопку Stop после завершения
+            bot.edit_message_reply_markup(chat_id, sent_message.message_id, reply_markup=None)
+
+            bot.register_next_step_handler(message, handle_g4f_dialog)
+
+        except Exception as e:
+            bot.send_message(chat_id, f"Ошибка: {str(e)}")
 
     def handle_model_selection(message):
         if message.text == 'Gemini 2.0 Experimental':
@@ -244,57 +273,66 @@ def setup_handlers(bot):
         bot.register_next_step_handler(
             message, handle_dialog, model_name=model_name)
 
-    def handle_dialog(message, model_name):  # Обработчик диалога
+    def handle_dialog(message, model_name):
         chat_id = message.chat.id
+
         if message.text == '⏹️ Завершить диалог':
-            bot.send_message(
-                chat_id, "Диалог завершен.", reply_markup=get_gemini_model_keyboard()
-            )
+            bot.send_message(chat_id, "Диалог завершен.", reply_markup=get_gemini_model_keyboard())
             if chat_id in dialog_sessions:
                 del dialog_sessions[chat_id]
             return
+
         elif message.text == '⬅️ Назад':
-            bot.send_message(
-                chat_id, "Возврат в главное меню.", reply_markup=get_gemini_model_keyboard()
-            )
+            bot.send_message(chat_id, "Возврат в главное меню.", reply_markup=get_gemini_model_keyboard())
             if chat_id in dialog_sessions:
                 del dialog_sessions[chat_id]
             return
-        else:
-            query = message.text
 
-            if chat_id not in dialog_sessions:
-                dialog_sessions[chat_id] = []
+        query = message.text
 
-            dialog_sessions[chat_id].append({"role": "user", "parts": [query]})
+        if chat_id not in dialog_sessions:
+            dialog_sessions[chat_id] = []
+
+        dialog_sessions[chat_id].append({"role": "user", "parts": [query]})
+
+        # Кнопка "Stop"
+        markup = types.InlineKeyboardMarkup()
+        stop_button = types.InlineKeyboardButton("⏹️ Stop", callback_data=f"stop_{chat_id}")
+        markup.add(stop_button)
+
+        sent_message = bot.send_message(chat_id, "Генерация ответа...", reply_markup=markup)
+        active_generations[chat_id] = True
 
         try:
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(dialog_sessions[chat_id])
 
-            # Разделение ответа на части и отправка
             response_text = response.text
-            max_length = 4000  # Максимальная длина сообщения Telegram
+            max_length = 4000
+            generated_text = ""
+
             for i in range(0, len(response_text), max_length):
+                if not active_generations.get(chat_id, False):  # Проверяем, остановлена ли генерация
+                    bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
+                    return
+
                 chunk = response_text[i:i + max_length]
-                formatted_chunk = format_bold_text(chunk)
-                bot.send_message(chat_id, formatted_chunk, parse_mode='HTML')
-                time.sleep(0.3)  # Небольшая задержка для избежания флуда
+                generated_text += chunk
+                formatted_chunk = format_bold_text(generated_text)
 
-            dialog_sessions[chat_id].append(
-                {"role": "model", "parts": [response_text]})  # Сохраняем полный ответ
+                bot.edit_message_text(formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
+                time.sleep(0.5)
 
-            bot.register_next_step_handler(
-                message, handle_dialog, model_name=model_name)
+            dialog_sessions[chat_id].append({"role": "model", "parts": [response_text]})
+            bot.edit_message_reply_markup(chat_id, sent_message.message_id, reply_markup=None)
+
+            bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
 
         except Exception as e:
-            logger.error(f"Ошибка при вызове API Gemini: {e}")
-            bot.send_message(
-                chat_id,
-                f"Ошибка при выполнении запроса: {str(e)}"
-            )
-            return
-        
+            bot.send_message(chat_id, f"Ошибка: {str(e)}")
+            
+
+
     def handle_open_folder(message):
         folder_path = message.text
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
