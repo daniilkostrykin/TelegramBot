@@ -15,14 +15,13 @@ from config import POPULAR_SITES
 import google.generativeai as genai
 from config import GEMINI_API_KEY, BOT_TOKEN
 from fuzzywuzzy import process
-from keyboards import get_gemini_model_keyboard, get_gemini_model_keyboard, get_main_keyboard, get_video_keyboard, get_computer_keyboard, get_mouse_keyboard, get_volume_keyboard, get_dialog_keyboard
-from keyboards import get_ai_selection_keyboard, get_g4f_model_keyboard
 from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
 from g4f.client import Client
 from deep_translator import GoogleTranslator
 from telebot.types import Message
-
+from keyboards import get_gemini_model_keyboard, get_gemini_model_keyboard, get_main_keyboard, get_computer_keyboard, get_volume_keyboard, get_dialog_keyboard
+from keyboards import get_ai_selection_keyboard, get_g4f_model_keyboard
 last_keyboard_message_id = None
 
 logger = logging.getLogger(__name__)
