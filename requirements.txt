@@ -1,5 +1,5 @@
 pyTelegramBotAPI==4.15.0
-pycaw==20231224
+pycaw
 comtypes==1.2.0
 fuzzywuzzy==0.18.0
 pyautogui==0.9.54
