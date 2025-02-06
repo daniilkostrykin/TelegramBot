@@ -39,6 +39,7 @@ def setup_handlers(bot):
         try:
             bot.send_message(
                 message.chat.id, f'Привет, {message.from_user.first_name}', reply_markup=get_main_keyboard())
+
         except Exception as e:
             logger.error(f"Error in start command: {e}")
             bot.send_message(message.chat.id, 'Произошла ошибка')
@@ -60,14 +61,36 @@ def setup_handlers(bot):
         bot.send_message(message.chat.id, "Функции управления компьютером недоступны.",
                          reply_markup=get_main_keyboard())
 
-    def format_bold_text(text):
-        """Форматирует текст, заменяя **текст** на жирный."""
-        def replace_bold(match):
-            return f'<b>{match.group(1)}</b>'
+    def format_telegram_text(text):
+        """Форматирует текст в Telegram HTML-разметку.  Удаляет незакрытые теги."""
 
-        formatted_text = re.sub(
-            r'\*\*(.*?)\*\*', replace_bold, text, flags=re.DOTALL)
-        return formatted_text
+        # Жирный **текст**
+        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text, flags=re.DOTALL)
+
+        # Курсив *текст*
+        text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text, flags=re.DOTALL)
+
+        # Подчёркнутый __текст__
+        text = re.sub(r'__(.*?)__', r'<u>\1</u>', text, flags=re.DOTALL)
+
+        # Зачёркнутый ~~текст~~
+        text = re.sub(r'~(.*?)~', r'<s>\1</s>', text, flags=re.DOTALL)
+
+        # Цитаты > текст (каждую строку)
+        text = re.sub(r'^> (.*?)$', r'<blockquote>\1</blockquote>',
+                    text, flags=re.MULTILINE)
+
+        # Моноширинный `код`
+        text = re.sub(r'```(.*?)```', r'<pre>\1</pre>', text, flags=re.DOTALL)
+
+        # Моноширинный `текст`
+        text = re.sub(r'`(.*?)`', r'<code>\1</code>', text, flags=re.DOTALL)
+
+        # Спойлер ||текст||
+        text = re.sub(r'\|\|(.*?)\|\|',
+                    r'<tg-spoiler>\1</tg-spoiler>', text, flags=re.DOTALL)
+
+        return text
 
     class ChatBotG4F:
         def __init__(self):
@@ -96,16 +119,6 @@ def setup_handlers(bot):
 
     # Создаем экземпляр бота для G4F
     g4f_bot = ChatBotG4F()
-
-    # --- Функции форматирования ---
-    def format_bold_text(text):
-        """Форматирует текст, заменяя **текст** на жирный."""
-        def replace_bold(match):
-            return f'<b>{match.group(1)}</b>'
-
-        formatted_text = re.sub(
-            r'\*\*(.*?)\*\*', replace_bold, text, flags=re.DOTALL)
-        return formatted_text
 
     @bot.message_handler(func=lambda message: message.text == 'Нейросети')
     def handle_ai(message):
@@ -154,16 +167,6 @@ def setup_handlers(bot):
             bot.send_message(
                 message.chat.id, "Неверный выбор модели. Попробуйте снова.")
             bot.register_next_step_handler(message, handle_g4f_model_selection)
-
-    def handle_g4f_query(message):
-        try:
-            response = g4f_bot.ask(message.text)
-            formatted_response = format_bold_text(response)
-            bot.send_message(
-                message.chat.id, formatted_response, parse_mode='HTML')
-            bot.register_next_step_handler(message, handle_g4f_query)
-        except Exception as e:
-            bot.send_message(message.chat.id, f"Ошибка: {str(e)}")
 
     @bot.message_handler(func=lambda message: message.text == '📂 Открыть папку')
     def open_folder(message):
@@ -232,7 +235,7 @@ def setup_handlers(bot):
 
                 chunk = response_text[i:i + max_length]
                 generated_text += chunk
-                formatted_chunk = format_bold_text(generated_text)
+                formatted_chunk = format_telegram_text(generated_text)
 
                 # Редактируем предыдущее сообщение
                 bot.edit_message_text(
@@ -284,8 +287,9 @@ def setup_handlers(bot):
         )
         bot.register_next_step_handler(
             message, handle_dialog, model_name=model_name)
+    
 
-    def handle_dialog(message, model_name):
+    def handle_dialog(message, model_name, test_query=None):
         chat_id = message.chat.id
 
         if message.text == '⏹️ Завершить диалог':
@@ -302,7 +306,7 @@ def setup_handlers(bot):
                 del dialog_sessions[chat_id]
             return
 
-        query = message.text
+        query = test_query if test_query else message.text
 
         if chat_id not in dialog_sessions:
             dialog_sessions[chat_id] = []
@@ -336,10 +340,10 @@ def setup_handlers(bot):
 
                 chunk = response_text[i:i + max_length]
                 generated_text += chunk
-                formatted_chunk = format_bold_text(generated_text)
+                formatted_text = format_telegram_text(generated_text)
 
                 bot.edit_message_text(
-                    formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
+                    formatted_text, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
                 time.sleep(0.5)
 
             dialog_sessions[chat_id].append(
