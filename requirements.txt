@@ -105,9 +105,7 @@ python-telegram-bot==21.10
 pythonnet==3.0.5
 pyttsx3==2.98
 pytweening==1.2.0
-pywebview==5.4
-pywin32==308
-pywin32-ctypes==0.2.3
+pywebview==5.7.0
 pywinauto==0.6.8
 requests==2.31.0
 rsa==4.9
