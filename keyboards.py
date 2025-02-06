@@ -2,47 +2,32 @@
 
 from telebot import types
 
-
 # --- Клавиатуры (keyboard.py) ---
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    video_button = types.KeyboardButton('Видео')
+    #video_button = types.KeyboardButton('Видео')
     computer_button = types.KeyboardButton('Компьютер')
     ai_button = types.KeyboardButton('Нейросети')
-    markup.row(video_button, computer_button, ai_button)
-    return markup
-"""
-def get_video_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    pause_button = types.KeyboardButton('⏯️ Пауза / ⏸️ Воспроизведение')
-    fast_forward = types.KeyboardButton('▶️ Перемотать вперед')
-    fast_backward = types.KeyboardButton('◀️ Перемотать назад')
-    back_button = types.KeyboardButton('⬅️ Назад')
-    markup.row(pause_button)
-    markup.row(fast_backward, fast_forward)
-    markup.add(back_button)
-    return markup
-"""
-def get_computer_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    off_button = types.KeyboardButton('❌ Выключить компьютер')
-    restart_button = types.KeyboardButton('🔄 Перезагрузить компьютер')
-    chrome_button = types.KeyboardButton(
-        text='🌐 Управление компьютером',
-        web_app=types.WebAppInfo(url='https://remotedesktop.google.com/access/')
-    )
-    open_site_button = types.KeyboardButton('🌐 Открыть сайт')
-    #full_screen_button = types.KeyboardButton('📺 На весь экран')
-   # mouse_button = types.KeyboardButton('🖱️ Мышь')
-    volume_button = types.KeyboardButton('🔊 Громкость')
-    open_button = types.KeyboardButton('📂 Открыть папку')
-    back_button = types.KeyboardButton('⬅️ Назад')
-    markup.add(off_button, restart_button, chrome_button)
-    #markup.add(open_site_button, full_screen_button, mouse_button, volume_button, open_button)
-    markup.add(open_site_button, volume_button, open_button)
-    markup.add(back_button)
+    #markup.row(video_button, computer_button, ai_button)
+    markup.row(computer_button, ai_button)
     return markup
 
+def get_computer_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    #off_button = types.KeyboardButton('❌ Выключить компьютер')
+    #restart_button = types.KeyboardButton('🔄 Перезагрузить компьютер')
+    #chrome_button = types.KeyboardButton(
+    #    text='🌐 Управление компьютером',
+    #    web_app=types.WebAppInfo(url='https://remotedesktop.google.com/access/')
+    #)
+    open_site_button = types.KeyboardButton('🌐 Открыть сайт')
+    #volume_button = types.KeyboardButton('🔊 Громкость')
+    open_button = types.KeyboardButton('📂 Открыть папку')
+    back_button = types.KeyboardButton('⬅️ Назад')
+    #markup.add(off_button, restart_button, chrome_button)
+    markup.add(open_site_button, open_button)
+    markup.add(back_button)
+    return markup
 
 def get_dialog_keyboard(): # Клавиатура для режима диалога
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -88,16 +73,7 @@ def get_gemini_model_keyboard():
     markup.add(model_7_button)
     markup.add(back_button)
     return markup
-
-def get_mouse_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    left_button = types.KeyboardButton('Лево')
-    right_button = types.KeyboardButton('Право')
-    back_button = types.KeyboardButton('⬅️ Назад')
-    markup.add(left_button, right_button)
-    markup.add(back_button)
-    return markup
-
+"""
 def get_volume_keyboard(is_muted):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     mute_button = types.KeyboardButton('🔊 Включить звук' if is_muted else '🔇 Выключить звук')
@@ -108,3 +84,4 @@ def get_volume_keyboard(is_muted):
     markup.add(up_button, down_button)
     markup.add(back_button)
     return markup
+"""

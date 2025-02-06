@@ -8,20 +8,18 @@ from telebot import types
 import logging
 import webbrowser
 import subprocess
-#import pyautogui  # Закомментировать
 import os
-#import pygetwindow as gw  # Закомментировать
 from config import POPULAR_SITES
 import google.generativeai as genai
 from config import GEMINI_API_KEY, BOT_TOKEN
 from fuzzywuzzy import process
-from audio_control import is_muted, mute_volume, unmute_volume, increase_volume, decrease_volume
 from app_control import open_application, get_closest_app, open_link
 from g4f.client import Client
 from deep_translator import GoogleTranslator
 from telebot.types import Message
-from keyboards import get_gemini_model_keyboard, get_gemini_model_keyboard, get_main_keyboard, get_computer_keyboard, get_volume_keyboard, get_dialog_keyboard
+from keyboards import get_gemini_model_keyboard, get_main_keyboard, get_computer_keyboard, get_dialog_keyboard
 from keyboards import get_ai_selection_keyboard, get_g4f_model_keyboard
+
 last_keyboard_message_id = None
 
 logger = logging.getLogger(__name__)
@@ -33,7 +31,6 @@ g4f_dialog_sessions = {}
 active_generations = {}  # Словарь для отслеживания генерации сообщений
 
 bot = telebot.TeleBot(BOT_TOKEN)
-
 
 def setup_handlers(bot):
     @bot.message_handler(commands=['start'])
@@ -59,8 +56,8 @@ def setup_handlers(bot):
 
     @bot.message_handler(func=lambda message: message.text == 'Компьютер')
     def handle_computer(message):
-        bot.send_message(message.chat.id, "Управление компьютером",
-                         reply_markup=get_computer_keyboard())
+        bot.send_message(message.chat.id, "Функции управления компьютером недоступны.",
+                         reply_markup=get_main_keyboard())
 
     def format_bold_text(text):
         """Форматирует текст, заменяя **текст** на жирный."""
@@ -70,8 +67,6 @@ def setup_handlers(bot):
         formatted_text = re.sub(
             r'\*\*(.*?)\*\*', replace_bold, text, flags=re.DOTALL)
         return formatted_text
-
-    # --- Класс ChatBotG4F ---
 
     class ChatBotG4F:
         def __init__(self):
@@ -173,8 +168,8 @@ def setup_handlers(bot):
     def open_folder(message):
         action = message.text
         if action == '📂 Открыть папку':
-            bot.send_message(message.chat.id, "Введите путь к папке.")
-            bot.register_next_step_handler(message, handle_open_folder)
+            bot.send_message(message.chat.id, "Функция недоступна на сервере.") #УДАЛЕНО: "Введите путь к папке."
+            #УДАЛЕНО: bot.register_next_step_handler(message, handle_open_folder)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
     def stop_generation(call):
@@ -356,7 +351,6 @@ def setup_handlers(bot):
         except Exception as e:
             bot.send_message(chat_id, f"Ошибка: {str(e)}")
 
-
     def translate_text(text, target_lang="en"):
         return GoogleTranslator(source="auto", target=target_lang).translate(text)
 
@@ -431,141 +425,14 @@ def setup_handlers(bot):
 
     def handle_open_folder(message):
         folder_path = message.text
-        if os.path.exists(folder_path) and os.path.isdir(folder_path):
-            os.startfile(folder_path)
-            bot.send_message(message.chat.id, f"Папка открыта: {folder_path}")
-        else:
-            bot.send_message(
-                message.chat.id, "Папка не найдена. Пожалуйста, проверьте путь.")
+        #УДАЛЕНО: if os.path.exists(folder_path) and os.path.isdir(folder_path):
+        #УДАЛЕНО:   os.startfile(folder_path)
+        #УДАЛЕНО:   bot.send_message(message.chat.id, f"Папка открыта: {folder_path}")
+        #УДАЛЕНО:else:
+        #УДАЛЕНО:    bot.send_message(
+        #УДАЛЕНО:        message.chat.id, "Папка не найдена. Пожалуйста, проверьте путь.")
         bot.send_message(message.chat.id, "Выберите следующее действие",
                          reply_markup=get_gemini_model_keyboard())
-
-    #@bot.message_handler(func=lambda message: message.text in ['⏯️ Пауза / ⏸️ Воспроизведение', '▶️ Перемотать вперед', '◀️ Перемотать назад'])
-    #def handle_video_controls(message):  # Закомментировать
-    #    action = message.text
-    #    if action == '⏯️ Пауза / ⏸️ Воспроизведение':
-    #        pyautogui.press('space')
-    #    elif action == '▶️ Перемотать вперед':
-    #        pyautogui.press('right')
-    #    elif action == '◀️ Перемотать назад':
-    #        pyautogui.press('left')
-
-    #@bot.message_handler(func=lambda message: message.text == '🖱️ Мышь')
-    #def mouse(message): # Закомментировать
-    #    bot.send_message(message.chat.id, "Управление мышью",
-    #                     reply_markup=get_mouse_keyboard())
-
-    #@bot.message_handler(func=lambda message: message.text in ['Лево', 'Право'])
-    #def handle_mouse(message): # Закомментировать
-    #    if message.text == 'Лево':
-    #        pyautogui.click(button='left')
-    #    elif message.text == 'Право':
-    #        pyautogui.click(button='right')
-
-    @bot.message_handler(func=lambda message: message.text == '🔊 Громкость')
-    def volume(message):
-        global last_keyboard_message_id
-        try:
-            # Отправляем сообщение с клавиатурой и сохраняем его message_id
-            sent_message = bot.send_message(
-                chat_id=message.chat.id,
-                text="Управление громкостью",
-                reply_markup=get_volume_keyboard(is_muted())
-            )
-            last_keyboard_message_id = sent_message.message_id
-        except Exception as e:
-            logger.error(f"Ошибка при отправке клавиатуры: {e}")
-
-    def update_volume_keyboard(message):
-        try:
-            bot.send_message(
-                chat_id=message.chat.id,
-                text="Управление громкостью",
-                reply_markup=get_volume_keyboard(is_muted())
-            )
-        except Exception as e:
-            logger.error(f"Ошибка при обновлении клавиатуры: {e}")
-
-    @bot.message_handler(func=lambda message: message.text in ['🔇 Выключить звук', '🔊 Включить звук', '🔊 Повысить громкость', '🔉 Понизить громкость'])
-    def handle_volume_controls(message):
-        action = message.text
-        if action == '🔇 Выключить звук':
-            mute_volume()
-            response = "Звук выключен."
-            update_volume_keyboard(message)
-
-        elif action == '🔊 Включить звук':
-            unmute_volume()
-            response = "Звук включен."
-            update_volume_keyboard(message)
-
-        elif action == '🔊 Повысить громкость':
-            current_volume_percent = increase_volume()
-            response = f'Громкость повышена. Текущая громкость: {
-                current_volume_percent}%'
-        elif action == '🔉 Понизить громкость':
-            current_volume_percent = decrease_volume()
-            response = f'Громкость понижена. Текущая громкость: {
-                current_volume_percent}%'
-        bot.send_message(message.chat.id, response)
-
-    #@bot.message_handler(func=lambda message: message.text == '📺 На весь экран')
-    #def fullscreen(message):  # Закомментировать
-    #    bot.send_message(
-    #        message.chat.id, 'Открываю текущее приложение на весь экран.')
-    #    active_window = gw.getActiveWindow()
-    #    if active_window:
-    #        active_window.maximize()
-    #    else:
-    #        print("Нет активного окна")
-
-    @bot.message_handler(func=lambda message: message.text == '❌ Выключить компьютер')
-    def shutdown(message):
-        markup = types.ReplyKeyboardMarkup(
-            resize_keyboard=True, one_time_keyboard=True)
-        markup.add(types.KeyboardButton(text='Да'),
-                   types.KeyboardButton(text='Нет'))
-        bot.send_message(
-            message.chat.id, 'Вы хотите выключить компьютер?', reply_markup=markup)
-        bot.register_next_step_handler(
-            message, lambda msg: handle_shutdown_restart_choice(msg, 'выключение'))
-
-    @bot.message_handler(func=lambda message: message.text == '🔄 Перезагрузить компьютер')
-    def restart(message):
-        markup = types.ReplyKeyboardMarkup(
-            resize_keyboard=True, one_time_keyboard=True)
-        markup.add(types.KeyboardButton(text='Да'),
-                   types.KeyboardButton(text='Нет'))
-        bot.send_message(
-            message.chat.id, 'Вы хотите перезагрузить компьютер?', reply_markup=markup)
-        bot.register_next_step_handler(
-            message, lambda msg: handle_shutdown_restart_choice(msg, 'перезагрузка'))
-
-    def handle_shutdown_restart_choice(message, action):
-        try:
-            if message.text == 'Да':
-                bot.send_message(
-                    message.chat.id, f'{action.capitalize()} компьютера...')
-                if action == 'выключение':
-                    subprocess.run(["shutdown", "/s", "/t", "5"], check=True)
-                elif action == 'перезагрузка':
-                    subprocess.run(["shutdown", "/r", "/t", "5"], check=True)
-            elif message.text == 'Нет':
-                bot.send_message(
-                    message.chat.id, f'Отмена {action} компьютера.')
-            else:
-                bot.send_message(
-                    message.chat.id, 'Пожалуйста, выберите "Да" или "Нет".')
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error in {action} command: {e}")
-            bot.send_message(
-                message.chat.id, f'Ошибка при {action} компьютера')
-        except Exception as e:
-            logger.error(f"Error in {action} command: {e}")
-            bot.send_message(message.chat.id, 'Произошла ошибка')
-        finally:
-            bot.send_message(
-                message.chat.id, 'Вернулся к основному меню', reply_markup=get_main_keyboard())
 
     @bot.message_handler(func=lambda message: message.text == '🌐 Открыть сайт')
     def open_site_handler(message):
