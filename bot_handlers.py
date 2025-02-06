@@ -17,7 +17,7 @@ from app_control import open_application, get_closest_app, open_link
 from g4f.client import Client
 from deep_translator import GoogleTranslator
 from telebot.types import Message
-from keyboards import get_gemini_model_keyboard, get_main_keyboard, get_computer_keyboard, get_dialog_keyboard
+from keyboards import get_gemini_model_keyboard, get_main_keyboard, get_gpt_dialog_keyboard, get_dialog_keyboard
 from keyboards import get_ai_selection_keyboard, get_g4f_model_keyboard
 
 last_keyboard_message_id = None
@@ -31,6 +31,7 @@ g4f_dialog_sessions = {}
 active_generations = {}  # Словарь для отслеживания генерации сообщений
 
 bot = telebot.TeleBot(BOT_TOKEN)
+
 
 def setup_handlers(bot):
     @bot.message_handler(commands=['start'])
@@ -52,7 +53,7 @@ def setup_handlers(bot):
     @bot.message_handler(func=lambda message: message.text == 'Видео')
     def handle_video(message):
         bot.send_message(message.chat.id, "Видео недоступно на сервере.",
-                         reply_markup=get_main_keyboard()) # или вообще удалить кнопку
+                         reply_markup=get_main_keyboard())  # или вообще удалить кнопку
 
     @bot.message_handler(func=lambda message: message.text == 'Компьютер')
     def handle_computer(message):
@@ -168,8 +169,9 @@ def setup_handlers(bot):
     def open_folder(message):
         action = message.text
         if action == '📂 Открыть папку':
-            bot.send_message(message.chat.id, "Функция недоступна на сервере.") #УДАЛЕНО: "Введите путь к папке."
-            #УДАЛЕНО: bot.register_next_step_handler(message, handle_open_folder)
+            # УДАЛЕНО: "Введите путь к папке."
+            bot.send_message(message.chat.id, "Функция недоступна на сервере.")
+            # УДАЛЕНО: bot.register_next_step_handler(message, handle_open_folder)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
     def stop_generation(call):
@@ -357,11 +359,15 @@ def setup_handlers(bot):
     @bot.message_handler(func=lambda message: message.text == 'Midjourney')
     def handle_midjourney_choice(message):
         bot.send_message(
-            message.chat.id, "Вы выбрали Midjourney. Введите запрос для генерации изображения."
+            message.chat.id, "Вы выбрали Midjourney. Введите запрос для генерации изображения.", reply_markup=get_gpt_dialog_keyboard()
         )
         bot.register_next_step_handler(message, handle_midjourney)
 
     def handle_midjourney(message: Message):
+        if message.text == '⬅️ Назад' or message.text == '⏹️ Завершить диалог':
+            bot.send_message(message.chat.id, "Возврат в меню нейросетей.",
+                             reply_markup=get_ai_selection_keyboard())
+            return
         translated_text = translate_text(message.text)
 
         # Отправляем сообщение с анимацией загрузки
@@ -371,7 +377,8 @@ def setup_handlers(bot):
 
         # Запускаем поток для обновления анимации
         stop_event = threading.Event()
-        loading_thread = threading.Thread(target=update_loading_message, args=(bot, loading_message, stop_event))
+        loading_thread = threading.Thread(
+            target=update_loading_message, args=(bot, loading_message, stop_event))
         loading_thread.start()
 
         start_time = time.time()  # Засекаем время начала генерации
@@ -400,6 +407,8 @@ def setup_handlers(bot):
             text=f"✅ Картинка сгенерирована за {elapsed_time} сек!"
         )
         bot.send_photo(message.chat.id, photo=image_data)
+        bot.register_next_step_handler(
+            message, handle_midjourney)  # Рекурсивный вызов
 
     def update_loading_message(bot, message, stop_event):
         dots = ""
@@ -408,8 +417,9 @@ def setup_handlers(bot):
         while not stop_event.is_set():
             dots = "." * (counter % 4)  # Меняем количество точек от 0 до 3
             elapsed_time = counter  # Время в секундах
-            new_text = f"Генерация картинки{dots}\nГенерируется лишь: {elapsed_time} сек"
-            
+            new_text = f"Генерация картинки{
+                dots}\nГенерируется лишь: {elapsed_time} сек"
+
             try:
                 bot.edit_message_text(
                     chat_id=message.chat.id,
@@ -422,15 +432,14 @@ def setup_handlers(bot):
             counter += 1
             time.sleep(1)
 
-
     def handle_open_folder(message):
         folder_path = message.text
-        #УДАЛЕНО: if os.path.exists(folder_path) and os.path.isdir(folder_path):
-        #УДАЛЕНО:   os.startfile(folder_path)
-        #УДАЛЕНО:   bot.send_message(message.chat.id, f"Папка открыта: {folder_path}")
-        #УДАЛЕНО:else:
-        #УДАЛЕНО:    bot.send_message(
-        #УДАЛЕНО:        message.chat.id, "Папка не найдена. Пожалуйста, проверьте путь.")
+        # УДАЛЕНО: if os.path.exists(folder_path) and os.path.isdir(folder_path):
+        # УДАЛЕНО:   os.startfile(folder_path)
+        # УДАЛЕНО:   bot.send_message(message.chat.id, f"Папка открыта: {folder_path}")
+        # УДАЛЕНО:else:
+        # УДАЛЕНО:    bot.send_message(
+        # УДАЛЕНО:        message.chat.id, "Папка не найдена. Пожалуйста, проверьте путь.")
         bot.send_message(message.chat.id, "Выберите следующее действие",
                          reply_markup=get_gemini_model_keyboard())
 
