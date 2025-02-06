@@ -11,7 +11,7 @@ def get_main_keyboard():
     ai_button = types.KeyboardButton('Нейросети')
     markup.row(video_button, computer_button, ai_button)
     return markup
-
+"""
 def get_video_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     pause_button = types.KeyboardButton('⏯️ Пауза / ⏸️ Воспроизведение')
@@ -22,7 +22,7 @@ def get_video_keyboard():
     markup.row(fast_backward, fast_forward)
     markup.add(back_button)
     return markup
-
+"""
 def get_computer_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     off_button = types.KeyboardButton('❌ Выключить компьютер')
@@ -32,13 +32,14 @@ def get_computer_keyboard():
         web_app=types.WebAppInfo(url='https://remotedesktop.google.com/access/')
     )
     open_site_button = types.KeyboardButton('🌐 Открыть сайт')
-    full_screen_button = types.KeyboardButton('📺 На весь экран')
-    mouse_button = types.KeyboardButton('🖱️ Мышь')
+    #full_screen_button = types.KeyboardButton('📺 На весь экран')
+   # mouse_button = types.KeyboardButton('🖱️ Мышь')
     volume_button = types.KeyboardButton('🔊 Громкость')
     open_button = types.KeyboardButton('📂 Открыть папку')
     back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(off_button, restart_button, chrome_button)
-    markup.add(open_site_button, full_screen_button, mouse_button, volume_button, open_button)
+    #markup.add(open_site_button, full_screen_button, mouse_button, volume_button, open_button)
+    markup.add(open_site_button, volume_button, open_button)
     markup.add(back_button)
     return markup
 

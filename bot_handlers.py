@@ -8,9 +8,9 @@ from telebot import types
 import logging
 import webbrowser
 import subprocess
-import pyautogui
+#import pyautogui  # Закомментировать
 import os
-import pygetwindow as gw
+#import pygetwindow as gw  # Закомментировать
 from config import POPULAR_SITES
 import google.generativeai as genai
 from config import GEMINI_API_KEY, BOT_TOKEN
@@ -55,8 +55,8 @@ def setup_handlers(bot):
 
     @bot.message_handler(func=lambda message: message.text == 'Видео')
     def handle_video(message):
-        bot.send_message(message.chat.id, "Управление видео",
-                         reply_markup=get_video_keyboard())
+        bot.send_message(message.chat.id, "Видео недоступно на сервере.",
+                         reply_markup=get_main_keyboard()) # или вообще удалить кнопку
 
     @bot.message_handler(func=lambda message: message.text == 'Компьютер')
     def handle_computer(message):
@@ -441,27 +441,27 @@ def setup_handlers(bot):
         bot.send_message(message.chat.id, "Выберите следующее действие",
                          reply_markup=get_gemini_model_keyboard())
 
-    @bot.message_handler(func=lambda message: message.text in ['⏯️ Пауза / ⏸️ Воспроизведение', '▶️ Перемотать вперед', '◀️ Перемотать назад'])
-    def handle_video_controls(message):
-        action = message.text
-        if action == '⏯️ Пауза / ⏸️ Воспроизведение':
-            pyautogui.press('space')
-        elif action == '▶️ Перемотать вперед':
-            pyautogui.press('right')
-        elif action == '◀️ Перемотать назад':
-            pyautogui.press('left')
+    #@bot.message_handler(func=lambda message: message.text in ['⏯️ Пауза / ⏸️ Воспроизведение', '▶️ Перемотать вперед', '◀️ Перемотать назад'])
+    #def handle_video_controls(message):  # Закомментировать
+    #    action = message.text
+    #    if action == '⏯️ Пауза / ⏸️ Воспроизведение':
+    #        pyautogui.press('space')
+    #    elif action == '▶️ Перемотать вперед':
+    #        pyautogui.press('right')
+    #    elif action == '◀️ Перемотать назад':
+    #        pyautogui.press('left')
 
-    @bot.message_handler(func=lambda message: message.text == '🖱️ Мышь')
-    def mouse(message):
-        bot.send_message(message.chat.id, "Управление мышью",
-                         reply_markup=get_mouse_keyboard())
+    #@bot.message_handler(func=lambda message: message.text == '🖱️ Мышь')
+    #def mouse(message): # Закомментировать
+    #    bot.send_message(message.chat.id, "Управление мышью",
+    #                     reply_markup=get_mouse_keyboard())
 
-    @bot.message_handler(func=lambda message: message.text in ['Лево', 'Право'])
-    def handle_mouse(message):
-        if message.text == 'Лево':
-            pyautogui.click(button='left')
-        elif message.text == 'Право':
-            pyautogui.click(button='right')
+    #@bot.message_handler(func=lambda message: message.text in ['Лево', 'Право'])
+    #def handle_mouse(message): # Закомментировать
+    #    if message.text == 'Лево':
+    #        pyautogui.click(button='left')
+    #    elif message.text == 'Право':
+    #        pyautogui.click(button='right')
 
     @bot.message_handler(func=lambda message: message.text == '🔊 Громкость')
     def volume(message):
@@ -510,15 +510,15 @@ def setup_handlers(bot):
                 current_volume_percent}%'
         bot.send_message(message.chat.id, response)
 
-    @bot.message_handler(func=lambda message: message.text == '📺 На весь экран')
-    def fullscreen(message):
-        bot.send_message(
-            message.chat.id, 'Открываю текущее приложение на весь экран.')
-        active_window = gw.getActiveWindow()
-        if active_window:
-            active_window.maximize()
-        else:
-            print("Нет активного окна")
+    #@bot.message_handler(func=lambda message: message.text == '📺 На весь экран')
+    #def fullscreen(message):  # Закомментировать
+    #    bot.send_message(
+    #        message.chat.id, 'Открываю текущее приложение на весь экран.')
+    #    active_window = gw.getActiveWindow()
+    #    if active_window:
+    #        active_window.maximize()
+    #    else:
+    #        print("Нет активного окна")
 
     @bot.message_handler(func=lambda message: message.text == '❌ Выключить компьютер')
     def shutdown(message):
