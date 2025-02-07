@@ -14,8 +14,8 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 # Токен бота
-BOT_TOKEN = "7768700329:AAGDdhc3SOssFG-71E0zSsynlAH-6Y2mQwk"
-bot = telebot.TeleBot(BOT_TOKEN)
+BOT_TOKEN1 = "7768700329:AAGDdhc3SOssFG-71E0zSsynlAH-6Y2mQwk"
+bot = telebot.TeleBot(BOT_TOKEN1)
 
 # Адрес веб-страницы с textarea
 WEB_PAGE_URL = "https://duckduckgo.com/?q=DuckDuckGo+AI+Chat&ia=chat&duckai=1&atb=v468-3"  # Замените на нужный URL страницы с textarea
