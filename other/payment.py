@@ -1,5 +1,5 @@
 from aiogram import Bot, Dispatcher, executor, types
-import config
+import z.config as config
 
 bot = Bot(config.BOT_TOKEN)
 dp = Dispatcher(bot)

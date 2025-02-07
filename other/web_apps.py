@@ -1,6 +1,6 @@
 import telebot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
-from config import BOT_TOKEN
+from z.config import BOT_TOKEN
 # Укажите ваш токен бота
 
 # Создаем объект бота

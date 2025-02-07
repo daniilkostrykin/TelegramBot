@@ -5,8 +5,8 @@ from threading import Thread
 import time
 import logging
 import telebot
-from config import BOT_TOKEN
-from bot_handlers import setup_handlers
+from z.config import BOT_TOKEN
+from z.bot_handlers import setup_handlers
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)

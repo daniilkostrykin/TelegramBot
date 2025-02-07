@@ -2,7 +2,7 @@ import telebot
 import webbrowser
 from telebot import types
 import sqlite3
-import config
+import z.config as config
 # Создаем объект бота с указанным токеном
 bot = telebot.TeleBot(config.BOT_TOKEN)
 name = ''

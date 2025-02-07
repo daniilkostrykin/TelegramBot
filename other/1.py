@@ -4,14 +4,14 @@ from telebot import types
 import telebot
 import webbrowser
 import subprocess
-import config
+import z.config as config
 import logging
 import os
 from fuzzywuzzy import process
 from pywinauto import Application, findwindows
 import pygetwindow as gw
 import shlex
-from config import POPULAR_SITES, TRANSLATIONS
+from z.config import POPULAR_SITES, TRANSLATIONS
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from ctypes import cast, POINTER
 from comtypes import CLSCTX_ALL
