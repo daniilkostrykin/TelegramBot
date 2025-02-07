@@ -124,6 +124,11 @@ def setup_handlers(bot):
     def handle_ai(message):
         bot.send_message(message.chat.id, "Выберите AI:",
                          reply_markup=get_ai_selection_keyboard())
+        
+    @bot.message_handler(func=lambda message: message.text == '🦆 Нейросети в интернете')
+    def handle_ai(message):
+        bot.send_message(message.chat.id, "Открываю",
+                         reply_markup=get_ai_selection_keyboard())
 
     @bot.message_handler(func=lambda message: message.text == '🤖 Выбор AI')
     def choose_ai(message):

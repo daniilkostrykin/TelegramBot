@@ -6,10 +6,11 @@ from telebot import types
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     #video_button = types.KeyboardButton('Видео')
-    computer_button = types.KeyboardButton('Компьютер')
+    #computer_button = types.KeyboardButton('Компьютер')
     ai_button = types.KeyboardButton('Нейросети')
+    duck_button = types.KeyboardButton('🦆 Нейросети в интернете', web_app=types.WebAppInfo('https://duckduckgo.com/?q=DuckDuckGo+AI+Chat&ia=chat&duckai=1'))
     #markup.row(video_button, computer_button, ai_button)
-    markup.row(computer_button, ai_button)
+    markup.row(ai_button, duck_button)
     return markup
 
 def get_computer_keyboard():
