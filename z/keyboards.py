@@ -43,7 +43,6 @@ def get_ai_selection_keyboard():
     text_image_button =  types.KeyboardButton("Текст-Изображение")
     text_voice_button = types.KeyboardButton("Текст-Голос")
     nocode_button = types.KeyboardButton("NoCode")
-    text_image_button = types.KeyboardButton("Голос-Текст")
     back_button = types.KeyboardButton("⬅️ Назад")
     keyboard.add(text_text_button, text_image_button)
     keyboard.add(text_voice_button, nocode_button)

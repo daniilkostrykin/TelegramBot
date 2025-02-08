@@ -504,21 +504,17 @@ def setup_handlers(bot):
         return None
     
     @bot.message_handler(func=lambda message: message.text == 'Текст-Текст')
-    def handle_ai(message):
-        bot.send_message(message.chat.id, "Выберите AI:",
-                         reply_markup=get_text_text_button())
+    def handle_ai_text_text(message):
+        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_text_text_button())
         
     @bot.message_handler(func=lambda message: message.text == 'Текст-Изображение')
-    def handle_ai(message):
-        bot.send_message(message.chat.id, "Выберите AI:",
-                         reply_markup=get_text_image_button())
+    def handle_ai_text_image(message):
+        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_text_image_button())
 
     @bot.message_handler(func=lambda message: message.text == 'Текст-Голос')
-    def handle_ai(message):
-        bot.send_message(message.chat.id, "Выберите AI:",
-                         reply_markup=get_text_voice_keyboard())
+    def handle_ai_text_voice(message):
+        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_text_voice_keyboard())
 
     @bot.message_handler(func=lambda message: message.text == 'NoCode')
-    def handle_ai(message):
-        bot.send_message(message.chat.id, "Выберите AI:",
-                         reply_markup=get_text_text_button())
+    def handle_ai_nocode(message):
+        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_nocode_keyboard())
