@@ -17,9 +17,7 @@ from z.app_control import open_application, get_closest_app, open_link
 from g4f.client import Client
 from deep_translator import GoogleTranslator
 from telebot.types import Message
-from z.keyboards import get_gemini_model_keyboard, get_main_keyboard, get_gpt_dialog_keyboard, get_dialog_keyboard
-from z.keyboards import get_ai_selection_keyboard, get_g4f_model_keyboard
-
+from z.keyboards import *
 last_keyboard_message_id = None
 
 logger = logging.getLogger(__name__)
@@ -368,7 +366,7 @@ def setup_handlers(bot):
     @bot.message_handler(func=lambda message: message.text == 'Midjourney')
     def handle_midjourney_choice(message):
         bot.send_message(
-            message.chat.id, "Вы выбрали Midjourney. Введите запрос для генерации изображения.", reply_markup=get_gpt_dialog_keyboard()
+            message.chat.id, "Вы выбрали Midjourney. Введите запрос для генерации изображения.", reply_markup=get_dialog_keyboard()
         )
         bot.register_next_step_handler(message, handle_midjourney)
 
@@ -504,3 +502,23 @@ def setup_handlers(bot):
         if score > 70:
             return POPULAR_SITES[closest_match]
         return None
+    
+    @bot.message_handler(func=lambda message: message.text == 'Текст-Текст')
+    def handle_ai(message):
+        bot.send_message(message.chat.id, "Выберите AI:",
+                         reply_markup=get_text_text_button())
+        
+    @bot.message_handler(func=lambda message: message.text == 'Текст-Изображение')
+    def handle_ai(message):
+        bot.send_message(message.chat.id, "Выберите AI:",
+                         reply_markup=get_text_image_button())
+
+    @bot.message_handler(func=lambda message: message.text == 'Текст-Голос')
+    def handle_ai(message):
+        bot.send_message(message.chat.id, "Выберите AI:",
+                         reply_markup=get_text_voice_keyboard())
+
+    @bot.message_handler(func=lambda message: message.text == 'NoCode')
+    def handle_ai(message):
+        bot.send_message(message.chat.id, "Выберите AI:",
+                         reply_markup=get_text_text_button())

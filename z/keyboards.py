@@ -39,24 +39,63 @@ def get_dialog_keyboard(): # Клавиатура для режима диало
 
 def get_ai_selection_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(types.KeyboardButton("ChatGPT"), types.KeyboardButton("Gemini"), types.KeyboardButton("G4F (Аналог ChatGPT)"))
-    keyboard.add(types.KeyboardButton("Midjourney"))
-    keyboard.add(types.KeyboardButton("⬅️ Назад"))
+    text_text_button = types.KeyboardButton("Текст-Текст")
+    text_image_button =  types.KeyboardButton("Текст-Изображение")
+    text_voice_button = types.KeyboardButton("Текст-Голос")
+    nocode_button = types.KeyboardButton("NoCode")
+    text_image_button = types.KeyboardButton("Голос-Текст")
+    back_button = types.KeyboardButton("⬅️ Назад")
+    keyboard.add(text_text_button, text_image_button)
+    keyboard.add(text_voice_button, nocode_button)
+    keyboard.add(back_button)
     return keyboard
 
+
+def get_text_text_button():
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    chatgpt_button = types.KeyboardButton("ChatGPT")
+    gemini_button = types.KeyboardButton("Gemini")
+    g4f_button = types.KeyboardButton("G4F (Аналог ChatGPT)")
+    back_button = types.KeyboardButton("⬅️ Назад")
+    keyboard.add(chatgpt_button, gemini_button, g4f_button)
+    keyboard.add(back_button)  
+    return keyboard  
+
+def get_text_image_button():
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    midjourney_button = types.KeyboardButton("Midjourney")
+    back_button = types.KeyboardButton("⬅️ Назад")
+    keyboard.add(midjourney_button)
+    keyboard.add(back_button)  
+    return keyboard  
+
+def get_text_voice_keyboard():
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    hailuo_button = types.KeyboardButton("Озвучка текста", types.WebAppInfo("https://www.hailuo.ai/audio"))
+    audiobook_button = types.KeyboardButton("Озвучка книги", types.WebAppInfo("https://huggingface.co/spaces/drewThomasson/ebook2audiobook"))
+    keyboard.add(hailuo_button, audiobook_button)
+
+    back_button = types.KeyboardButton("⬅️ Назад")
+    keyboard.add(back_button)
+
+    return keyboard
+
+def get_nocode_keyboard():
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    glide_button = types.KeyboardButton("Glide", types.WebAppInfo("https://www.glideapps.com/"))
+
+
+    back_button = types.KeyboardButton("⬅️ Назад")
+    keyboard.add(glide_button)
+    keyboard.add(back_button)
+
+    return keyboard
 def get_g4f_model_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     model_1_button = types.KeyboardButton('GPT 4o mini')
     back_button = types.KeyboardButton('⬅️ Назад')
     markup.add(model_1_button)
     markup.add(back_button)
-    return markup
-
-def get_gpt_dialog_keyboard(): # Клавиатура для режима диалога
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    end_dialog_button = types.KeyboardButton('⏹️ Завершить диалог')
-    back_button = types.KeyboardButton('⬅️ Назад')
-    markup.add(end_dialog_button, back_button)
     return markup
 
 def get_gemini_model_keyboard():
