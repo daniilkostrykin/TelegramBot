@@ -70,8 +70,8 @@ def get_text_image_button():
 
 def get_text_voice_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    hailuo_button = types.KeyboardButton("Озвучка текста", types.WebAppInfo("https://www.hailuo.ai/audio"))
-    audiobook_button = types.KeyboardButton("Озвучка книги", types.WebAppInfo("https://huggingface.co/spaces/drewThomasson/ebook2audiobook"))
+    hailuo_button = types.KeyboardButton("Озвучка текста", web_app=types.WebAppInfo("https://www.hailuo.ai/audio"))
+    audiobook_button = types.KeyboardButton("Озвучка книги", web_app=types.WebAppInfo("https://huggingface.co/spaces/drewThomasson/ebook2audiobook"))
     keyboard.add(hailuo_button, audiobook_button)
 
     back_button = types.KeyboardButton("⬅️ Назад")
@@ -81,7 +81,7 @@ def get_text_voice_keyboard():
 
 def get_nocode_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    glide_button = types.KeyboardButton("Glide", types.WebAppInfo("https://www.glideapps.com/"))
+    glide_button = types.KeyboardButton("Glide", web_app=types.WebAppInfo("https://www.glideapps.com/"))
 
 
     back_button = types.KeyboardButton("⬅️ Назад")
