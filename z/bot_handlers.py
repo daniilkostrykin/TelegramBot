@@ -42,7 +42,6 @@ def setup_handlers(bot):
                 "Вот что я умею:\n"
                 "- Работа с текстом (генерация, перевод, суммаризация)\n"
                 "- Генерация изображений\n"
-                "- Анализ файлов (извлечение текста из PDF)\n"
                 "- Доступ к различным AI-моделям (Gemini, G4F, ChatGPT и др.)\n\n"
                 "Чтобы начать, выберите пункт в меню.",
                 reply_markup=get_main_keyboard()
@@ -594,3 +593,15 @@ def setup_handlers(bot):
     def handle_ai_nocode(message):
         bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_nocode_keyboard())
         save_user_state(message.chat.id, 'nocode')
+
+    @bot.message_handler(func=lambda message: message.text == 'Озвучка текста')
+    def handle_ai_hailuo(message):
+        chat_id = message.chat.id
+        save_user_state(chat_id, 'text_voice')  
+
+        markup = types.InlineKeyboardMarkup()
+        hailuo_button = types.InlineKeyboardButton(text="Перейти к Озвучке текста", url="https://www.hailuo.ai/audio")
+        markup.add(hailuo_button)
+
+
+        bot.send_message(chat_id, "Нажмите кнопку ниже, чтобы перейти к озвучке текста:", reply_markup=markup)

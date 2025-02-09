@@ -76,10 +76,9 @@ def get_text_image_button():
 
 def get_text_voice_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    hailuo_button = types.KeyboardButton("Озвучка текста", web_app=types.WebAppInfo("https://www.hailuo.ai/audio"))
+    hailuo_button = types.KeyboardButton("Озвучка текста")
     audiobook_button = types.KeyboardButton("Озвучка книги", web_app=types.WebAppInfo("https://huggingface.co/spaces/drewThomasson/ebook2audiobook"))
     keyboard.add(hailuo_button, audiobook_button)
-
     back_button = types.KeyboardButton("⬅️ Назад")
     keyboard.add(back_button)
 
