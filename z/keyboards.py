@@ -4,7 +4,6 @@ from telebot import types
 import telebot
 from z.config import GEMINI_API_KEY, BOT_TOKEN
 bot = telebot.TeleBot(BOT_TOKEN)
-chat_id = 7616648953
 
 # --- Клавиатуры (keyboard.py) ---
 def get_main_keyboard():
@@ -51,11 +50,6 @@ def get_ai_selection_keyboard():
     keyboard.add(text_text_button, text_image_button)
     keyboard.add(text_voice_button, nocode_button)
     keyboard.add(back_button)
-
-    # Add a note about VPN
-    vpn_note = "🌐 - для доступа может потребоваться VPN"
-    bot.send_message(chat_id, vpn_note)
-
     return keyboard
 
 def get_text_text_button():
