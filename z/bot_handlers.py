@@ -18,7 +18,6 @@ from g4f.client import Client
 from deep_translator import GoogleTranslator
 from telebot.types import Message
 from z.keyboards import *
-last_keyboard_message_id = None
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +26,7 @@ genai.configure(api_key=GEMINI_API_KEY)
 dialog_sessions = {}  # Словарь для хранения истории диалогов
 g4f_dialog_sessions = {}
 active_generations = {}  # Словарь для отслеживания генерации сообщений
+user_states = {}  # {chat_id: [state1, state2, ...]}
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -47,27 +47,67 @@ def setup_handlers(bot):
                 "Чтобы начать, выберите пункт в меню.",
                 reply_markup=get_main_keyboard()
             )
+            save_user_state(message.chat.id, 'main_menu')  # Сохраняем состояние
         except Exception as e:
             logger.error(f"Error in start command: {e}")
             bot.send_message(message.chat.id, 'Произошла ошибка')
 
+    def save_user_state(chat_id, state):
+        """Сохраняет текущее состояние пользователя."""
+        if chat_id not in user_states:
+            user_states[chat_id] = []
+        user_states[chat_id].append(state)
+
+    def get_previous_user_state(chat_id):
+        """Возвращает предыдущее состояние пользователя."""
+        if chat_id in user_states and len(user_states[chat_id]) > 1:
+            user_states[chat_id].pop()  # Убираем текущее состояние
+            return user_states[chat_id][-1]  # Возвращаем предыдущее
+        else:
+            return None  # Если нет истории, возвращаем None
 
     @bot.message_handler(func=lambda message: message.text == '⬅️ Назад')
     def back(message):
-        global window_menu_active
-        window_menu_active = False  # сбрасываем флаг при возврате
-        bot.send_message(message.chat.id, "⬅️ Назад",
-                         reply_markup=get_main_keyboard())
+        chat_id = message.chat.id
+        previous_state = get_previous_user_state(chat_id)
+
+        if previous_state == 'ai_selection':
+            bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_ai_selection_keyboard())
+        elif previous_state == 'text_text':
+             bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_text_text_button())
+        elif previous_state == 'text_image':
+             bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_text_image_button())
+        elif previous_state == 'text_voice':
+             bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_text_voice_keyboard())   
+        elif previous_state == 'nocode':
+             bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_nocode_keyboard())            
+        elif previous_state == 'gemini_model_selection':
+            bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_gemini_model_keyboard())
+        elif previous_state == 'g4f_model_selection':
+            bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_g4f_model_keyboard())
+        else:
+            bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_main_keyboard())
+            save_user_state(chat_id, 'main_menu')
 
     @bot.message_handler(func=lambda message: message.text == 'Видео')
     def handle_video(message):
         bot.send_message(message.chat.id, "Видео недоступно на сервере.",
-                         reply_markup=get_main_keyboard())  # или вообще удалить кнопку
+                         reply_markup=get_main_keyboard())
+        save_user_state(message.chat.id, 'main_menu')  # Сохраняем состояние
 
     @bot.message_handler(func=lambda message: message.text == 'Компьютер')
     def handle_computer(message):
         bot.send_message(message.chat.id, "Функции управления компьютером недоступны.",
                          reply_markup=get_main_keyboard())
+        save_user_state(message.chat.id, 'main_menu')  # Сохраняем состояние
 
     def format_telegram_text(text):
         """Форматирует текст в Telegram HTML-разметку.  Удаляет незакрытые теги."""
@@ -132,33 +172,36 @@ def setup_handlers(bot):
     def handle_ai(message):
         bot.send_message(message.chat.id, "Выберите AI:",
                          reply_markup=get_ai_selection_keyboard())
-        
+        save_user_state(message.chat.id, 'ai_selection')
+
     @bot.message_handler(func=lambda message: message.text == '🦆 Нейросети в интернете')
     def handle_ai(message):
         bot.send_message(message.chat.id, "Открываю",
                          reply_markup=get_ai_selection_keyboard())
+        save_user_state(message.chat.id, 'ai_selection')
 
     @bot.message_handler(func=lambda message: message.text == '🤖 Выбор AI')
     def choose_ai(message):
         bot.send_message(message.chat.id, "Выберите AI:",
                          reply_markup=get_ai_selection_keyboard())
+        save_user_state(message.chat.id, 'ai_selection')
 
-    @bot.message_handler(func=lambda message: message.text in ['ChatGPT', 'Gemini', 'G4F (Аналог ChatGPT)'])
+    @bot.message_handler(func=lambda message: message.text in ['ChatGPT🌐', 'Gemini', 'G4F (Аналог ChatGPT)', 'Microsoft Copilot🌐', 'Github Copilot🌐'])
     def handle_ai_choice(message):
         if message.text == 'Gemini':
             bot.send_message(message.chat.id, "Вы выбрали Gemini.",
                              reply_markup=get_gemini_model_keyboard())
+            save_user_state(message.chat.id, 'gemini_model_selection')
             bot.register_next_step_handler(message, handle_model_selection)
         elif message.text == 'G4F (Аналог ChatGPT)':
             bot.send_message(message.chat.id, "Вы выбрали G4F. Выберите модель:",
                              reply_markup=get_g4f_model_keyboard())
+            save_user_state(message.chat.id, 'g4f_model_selection')
             bot.register_next_step_handler(message, handle_g4f_model_selection)
-        elif message.text == 'ChatGPT':
-            bot.send_message(
-                message.chat.id, "Функционал ChatGPT пока не реализован.")  # TODO
         elif message.text == '⬅️ Назад':
             bot.send_message(
                 message.chat.id, "Возврат в главное меню.", reply_markup=get_main_keyboard())
+            save_user_state(message.chat.id, 'main_menu')
 
     def handle_g4f_model_selection(message):
         if message.text == '⬅️ Назад':
@@ -175,6 +218,7 @@ def setup_handlers(bot):
             g4f_bot.set_model(model_name)
             bot.send_message(message.chat.id, f"Вы выбрали {model_name}. Введите ваш запрос:",
                              reply_markup=get_dialog_keyboard())
+            save_user_state(message.chat.id, 'g4f_dialog')
             bot.register_next_step_handler(message, handle_g4f_dialog)
         else:
             bot.send_message(
@@ -187,6 +231,7 @@ def setup_handlers(bot):
         if action == '📂 Открыть папку':
             # УДАЛЕНО: "Введите путь к папке."
             bot.send_message(message.chat.id, "Функция недоступна на сервере.")
+            save_user_state(message.chat.id, 'main_menu')  # Сохраняем состояние
             # УДАЛЕНО: bot.register_next_step_handler(message, handle_open_folder)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
@@ -201,14 +246,18 @@ def setup_handlers(bot):
 
         if message.text == '⏹️ Завершить диалог':
             bot.send_message(chat_id, "Диалог завершен.",
-                             reply_markup=get_g4f_model_keyboard())
+                             reply_markup=get_main_keyboard())
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
+            if chat_id in user_states:
+                del user_states[chat_id]
+            save_user_state(chat_id, 'main_menu')
             return
 
         elif message.text == '⬅️ Назад':
-            bot.send_message(chat_id, "Возврат в главное меню.",
-                             reply_markup=get_ai_selection_keyboard())
+            bot.send_message(chat_id, "Возврат в меню выбора G4F модели.",
+                             reply_markup=get_g4f_model_keyboard())
+            save_user_state(chat_id, 'g4f_model_selection')
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
             return
@@ -286,7 +335,8 @@ def setup_handlers(bot):
             model_name = 'gemini-2.0-flash'
         elif message.text == '⬅️ Назад':
             bot.send_message(
-                message.chat.id, "Возврат в главное меню.", reply_markup=get_gemini_model_keyboard())
+                message.chat.id, "Возврат в меню выбора AI.", reply_markup=get_ai_selection_keyboard())
+            save_user_state(message.chat.id, 'ai_selection')
             return
         else:
             bot.send_message(
@@ -298,6 +348,7 @@ def setup_handlers(bot):
             f"Вы выбрали: {model_name}. Начните диалог.",
             reply_markup=get_dialog_keyboard()
         )
+        save_user_state(message.chat.id, 'gemini_dialog')
         bot.register_next_step_handler(
             message, handle_dialog, model_name=model_name)
     
@@ -307,14 +358,18 @@ def setup_handlers(bot):
 
         if message.text == '⏹️ Завершить диалог':
             bot.send_message(chat_id, "Диалог завершен.",
-                             reply_markup=get_gemini_model_keyboard())
+                             reply_markup=get_ai_selection_keyboard())
             if chat_id in dialog_sessions:
                 del dialog_sessions[chat_id]
+            if chat_id in user_states:
+                del user_states[chat_id]
+            save_user_state(chat_id, 'ai_selection')
             return
 
         elif message.text == '⬅️ Назад':
-            bot.send_message(chat_id, "Возврат в главное меню.",
+            bot.send_message(chat_id, "Возврат в меню выбора Gemini модели.",
                              reply_markup=get_gemini_model_keyboard())
+            save_user_state(chat_id, 'gemini_model_selection')
             if chat_id in dialog_sessions:
                 del dialog_sessions[chat_id]
             return
@@ -378,12 +433,18 @@ def setup_handlers(bot):
         bot.send_message(
             message.chat.id, "Вы выбрали Midjourney. Введите запрос для генерации изображения.", reply_markup=get_dialog_keyboard()
         )
+        save_user_state(message.chat.id, 'midjourney_dialog')
         bot.register_next_step_handler(message, handle_midjourney)
 
     def handle_midjourney(message: Message):
+        chat_id = message.chat.id
         if message.text == '⬅️ Назад' or message.text == '⏹️ Завершить диалог':
             bot.send_message(message.chat.id, "Возврат в меню нейросетей.",
                              reply_markup=get_ai_selection_keyboard())
+            if chat_id in user_states:
+                del user_states[chat_id]
+            save_user_state(chat_id, 'ai_selection')
+
             return
         translated_text = translate_text(message.text)
 
@@ -459,6 +520,7 @@ def setup_handlers(bot):
         # УДАЛЕНО:        message.chat.id, "Папка не найдена. Пожалуйста, проверьте путь.")
         bot.send_message(message.chat.id, "Выберите следующее действие",
                          reply_markup=get_gemini_model_keyboard())
+        save_user_state(message.chat.id, 'gemini_model_selection')
 
     @bot.message_handler(func=lambda message: message.text == '🌐 Открыть сайт')
     def open_site_handler(message):
@@ -516,15 +578,19 @@ def setup_handlers(bot):
     @bot.message_handler(func=lambda message: message.text == 'Текст-Текст')
     def handle_ai_text_text(message):
         bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_text_text_button())
+        save_user_state(message.chat.id, 'text_text')
         
     @bot.message_handler(func=lambda message: message.text == 'Текст-Изображение')
     def handle_ai_text_image(message):
         bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_text_image_button())
+        save_user_state(message.chat.id, 'text_image')
 
     @bot.message_handler(func=lambda message: message.text == 'Текст-Голос')
     def handle_ai_text_voice(message):
         bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_text_voice_keyboard())
+        save_user_state(message.chat.id, 'text_voice')
 
     @bot.message_handler(func=lambda message: message.text == 'NoCode')
     def handle_ai_nocode(message):
         bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_nocode_keyboard())
+        save_user_state(message.chat.id, 'nocode')
