@@ -36,11 +36,21 @@ def setup_handlers(bot):
     def start(message):
         try:
             bot.send_message(
-                message.chat.id, f'Привет, {message.from_user.first_name}', reply_markup=get_main_keyboard())
-
+                message.chat.id,
+                f"Привет, {message.from_user.first_name}!\n\n"
+                "Я бот, который предоставляет доступ к различным нейросетям и другим полезным функциям.\n\n"
+                "Вот что я умею:\n"
+                "- Работа с текстом (генерация, перевод, суммаризация)\n"
+                "- Генерация изображений\n"
+                "- Анализ файлов (извлечение текста из PDF)\n"
+                "- Доступ к различным AI-моделям (Gemini, G4F, ChatGPT и др.)\n\n"
+                "Чтобы начать, выберите пункт в меню.",
+                reply_markup=get_main_keyboard()
+            )
         except Exception as e:
             logger.error(f"Error in start command: {e}")
             bot.send_message(message.chat.id, 'Произошла ошибка')
+
 
     @bot.message_handler(func=lambda message: message.text == '⬅️ Назад')
     def back(message):

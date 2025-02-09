@@ -1,6 +1,10 @@
 # keyboards.py
 
 from telebot import types
+import telebot
+from z.config import GEMINI_API_KEY, BOT_TOKEN
+bot = telebot.TeleBot(BOT_TOKEN)
+chat_id = 7616648953
 
 # --- Клавиатуры (keyboard.py) ---
 def get_main_keyboard():
@@ -47,16 +51,24 @@ def get_ai_selection_keyboard():
     keyboard.add(text_text_button, text_image_button)
     keyboard.add(text_voice_button, nocode_button)
     keyboard.add(back_button)
-    return keyboard
 
+    # Add a note about VPN
+    vpn_note = "🌐 - для доступа может потребоваться VPN"
+    bot.send_message(chat_id, vpn_note)
+
+    return keyboard
 
 def get_text_text_button():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    chatgpt_button = types.KeyboardButton("ChatGPT")
+    chatgpt_button = types.KeyboardButton("ChatGPT🌐", web_app=types.WebAppInfo("https://chatgpt.com/"))
     gemini_button = types.KeyboardButton("Gemini")
     g4f_button = types.KeyboardButton("G4F (Аналог ChatGPT)")
+    microsoft_copilot_button = types.KeyboardButton("Microsoft Copilot🌐", web_app=types.WebAppInfo("https://copilot.microsoft.com/"))    
+    github_copilot_button = types.KeyboardButton("Github Copilot🌐", web_app=types.WebAppInfo("https://github.com/copilot"))
     back_button = types.KeyboardButton("⬅️ Назад")
-    keyboard.add(chatgpt_button, gemini_button, g4f_button)
+    keyboard.add(chatgpt_button, gemini_button)
+    keyboard.add(g4f_button, microsoft_copilot_button)
+    keyboard.add(github_copilot_button)
     keyboard.add(back_button)  
     return keyboard  
 
