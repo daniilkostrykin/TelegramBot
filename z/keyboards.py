@@ -46,9 +46,12 @@ def get_ai_selection_keyboard():
     text_image_button =  types.KeyboardButton("Текст-Изображение")
     text_voice_button = types.KeyboardButton("Текст-Голос")
     nocode_button = types.KeyboardButton("NoCode")
+    appearance_button = types.KeyboardButton("Внешность")
+    photo_button = types.KeyboardButton("Фото")
     back_button = types.KeyboardButton("⬅️ Назад")
     keyboard.add(text_text_button, text_image_button)
     keyboard.add(text_voice_button, nocode_button)
+    keyboard.add(appearance_button, photo_button)
     keyboard.add(back_button)
     return keyboard
 
@@ -81,19 +84,32 @@ def get_text_voice_keyboard():
     keyboard.add(hailuo_button, audiobook_button)
     back_button = types.KeyboardButton("⬅️ Назад")
     keyboard.add(back_button)
-
     return keyboard
 
 def get_nocode_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     glide_button = types.KeyboardButton("Glide", web_app=types.WebAppInfo("https://www.glideapps.com/"))
-
-
     back_button = types.KeyboardButton("⬅️ Назад")
     keyboard.add(glide_button)
     keyboard.add(back_button)
-
     return keyboard
+
+def get_appearance_keyboard():
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    tough_tongue_ai_button = types.KeyboardButton("Tough Tongue AI", web_app=types.WebAppInfo("https://app.toughtongueai.com/"))
+    back_button = types.KeyboardButton("⬅️ Назад")
+    keyboard.add(tough_tongue_ai_button)
+    keyboard.add(back_button)
+    return keyboard
+
+def get_photo_keyboard():
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    memenome_button = types.KeyboardButton("Memenome", web_app=types.WebAppInfo("https://www.memenome.gg/"))
+    back_button = types.KeyboardButton("⬅️ Назад")
+    keyboard.add(memenome_button)
+    keyboard.add(back_button)
+    return keyboard
+
 def get_g4f_model_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     model_1_button = types.KeyboardButton('GPT 4o mini')

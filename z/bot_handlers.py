@@ -91,6 +91,9 @@ def setup_handlers(bot):
         elif previous_state == 'g4f_model_selection':
             bot.send_message(message.chat.id, "⬅️ Назад",
                              reply_markup=get_g4f_model_keyboard())
+        elif previous_state == 'appearance':
+            bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_appearance_keyboard())
         else:
             bot.send_message(message.chat.id, "⬅️ Назад",
                              reply_markup=get_main_keyboard())
@@ -605,3 +608,9 @@ def setup_handlers(bot):
 
 
         bot.send_message(chat_id, "Нажмите кнопку ниже, чтобы перейти к озвучке текста:", reply_markup=markup)
+
+
+    @bot.message_handler(func=lambda message: message.text == 'Внешность')
+    def handle_ai_appearance(message):
+        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_appearance_keyboard())
+        save_user_state(message.chat.id, 'appearance')
