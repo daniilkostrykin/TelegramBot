@@ -94,6 +94,10 @@ def setup_handlers(bot):
         elif previous_state == 'appearance':
             bot.send_message(message.chat.id, "⬅️ Назад",
                              reply_markup=get_appearance_keyboard())
+        elif previous_state == 'photo':
+            bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_photo_keyboard())
+                
         else:
             bot.send_message(message.chat.id, "⬅️ Назад",
                              reply_markup=get_main_keyboard())
@@ -614,3 +618,8 @@ def setup_handlers(bot):
     def handle_ai_appearance(message):
         bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_appearance_keyboard())
         save_user_state(message.chat.id, 'appearance')
+
+    @bot.message_handler(func=lambda message: message.text == 'Фото')
+    def handle_ai_photo(message):
+        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_photo_keyboard())
+        save_user_state(message.chat.id, 'photo')
