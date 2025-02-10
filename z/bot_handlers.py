@@ -581,25 +581,67 @@ def setup_handlers(bot):
             return POPULAR_SITES[closest_match]
         return None
     
+
+
+    def handle_ai_category(message, category, text, keyboard):
+        bot.send_message(message.chat.id, text, parse_mode="Markdown", reply_markup=keyboard)
+        save_user_state(message.chat.id, category)
+
     @bot.message_handler(func=lambda message: message.text == 'Текст-Текст')
     def handle_ai_text_text(message):
-        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_text_text_button())
-        save_user_state(message.chat.id, 'text_text')
-        
+        handle_ai_category(
+            message, 'text_text', 
+            """📄 *Категория: Текст-Текст*
+
+            Нейросети для работы с текстом:
+            - **ChatGPT** – генерация и анализ текста.
+            - **Gemini** – текстовая обработка от Google.
+            - **G4F** – бесплатная альтернатива ChatGPT.
+
+            Выберите модель:""", 
+            get_text_text_button()
+        )
+
     @bot.message_handler(func=lambda message: message.text == 'Текст-Изображение')
     def handle_ai_text_image(message):
-        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_text_image_button())
-        save_user_state(message.chat.id, 'text_image')
+        handle_ai_category(
+            message, 'text_image', 
+            """🖼️ *Категория: Текст-Изображение*
+
+            Нейросети для генерации изображений:
+            - **Midjourney** – создание детализированных картинок.
+        
+
+            Выберите сервис:""", 
+            get_text_image_button()
+        )
 
     @bot.message_handler(func=lambda message: message.text == 'Текст-Голос')
     def handle_ai_text_voice(message):
-        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_text_voice_keyboard())
-        save_user_state(message.chat.id, 'text_voice')
+        handle_ai_category(
+            message, 'text_voice', 
+            """🔊 *Категория: Текст-Голос*
+
+            Нейросети для озвучивания текста:
+            - **Hailuo** – генерация естественной речи.
+            - **Hugging Face Audiobook** – конвертация текста в аудиокниги.
+
+            Выберите сервис:""", 
+            get_text_voice_keyboard()
+        )
 
     @bot.message_handler(func=lambda message: message.text == 'NoCode')
     def handle_ai_nocode(message):
-        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_nocode_keyboard())
-        save_user_state(message.chat.id, 'nocode')
+        handle_ai_category(
+            message, 'nocode', 
+            """🛠️ *Категория: NoCode*
+
+            Платформы для разработки без кода:
+            - **Glide** – создание мобильных приложений.
+
+            Выберите платформу:""", 
+            get_nocode_keyboard()
+        )
 
     @bot.message_handler(func=lambda message: message.text == 'Озвучка текста')
     def handle_ai_hailuo(message):
@@ -610,16 +652,30 @@ def setup_handlers(bot):
         hailuo_button = types.InlineKeyboardButton(text="Перейти к Озвучке текста", url="https://www.hailuo.ai/audio")
         markup.add(hailuo_button)
 
-
         bot.send_message(chat_id, "Нажмите кнопку ниже, чтобы перейти к озвучке текста:", reply_markup=markup)
-
 
     @bot.message_handler(func=lambda message: message.text == 'Внешность')
     def handle_ai_appearance(message):
-        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_appearance_keyboard())
-        save_user_state(message.chat.id, 'appearance')
+        handle_ai_category(
+            message, 'appearance', 
+            """🎭 *Категория: Внешность*
+
+            Сервисы для изменения внешности:
+            - **Tough Tongue AI** – ваш ИИ-клон для онлайн-конференций.
+
+            Выберите сервис:""", 
+            get_appearance_keyboard()
+        )
 
     @bot.message_handler(func=lambda message: message.text == 'Фото')
     def handle_ai_photo(message):
-        bot.send_message(message.chat.id, "Выберите AI:", reply_markup=get_photo_keyboard())
-        save_user_state(message.chat.id, 'photo')
+        handle_ai_category(
+            message, 'photo', 
+            """📸 *Категория: Фото*
+
+            Сервисы для обработки изображений:
+            - **Memenome** – создание видео с текстом для людей с СДВГ.
+
+            Выберите сервис:""", 
+            get_photo_keyboard()
+        )
