@@ -95,28 +95,27 @@ def setup_handlers(bot):
         else:
             return None  # Если нет истории, возвращаем None
 
-
     def save_dialog_message(chat_id, role, content):
         """Сохраняет сообщение в диалог пользователя (в БД и в память)."""
 
         if chat_id not in dialog_sessions:
             dialog_sessions[chat_id] = []
 
-        dialog_sessions[chat_id].append({"role": role, "content": content})
+        # Изменяем формат сохраняемого сообщения
+        dialog_sessions[chat_id].append({"role": role, "parts": [content]})
 
         # Сохраняем сообщение и в БД:
         try:
             cursor.execute("""
-                INSERT INTO dialog_sessions (chat_id, messages) 
-                VALUES (%s, %s) 
-                ON CONFLICT (chat_id) 
+                INSERT INTO dialog_sessions (chat_id, messages)
+                VALUES (%s, %s)
+                ON CONFLICT (chat_id)
                 DO UPDATE SET messages = dialog_sessions.messages || EXCLUDED.messages;
-            """, (chat_id, json.dumps([{"role": role, "content": content}])))  # Конвертируем в JSON здесь
+            """, (chat_id, json.dumps([{"role": role, "parts": [content]}], ensure_ascii=False)))  # Конвертируем в JSON здесь
             conn.commit()
         except Exception as e:
             print(f"Ошибка при сохранении в БД: {e}")
-
-
+        
     def get_dialog_history(chat_id):
         """Получает всю историю диалога из БД."""
         cursor.execute("SELECT messages FROM dialog_sessions WHERE chat_id = %s", (chat_id,))
@@ -481,7 +480,6 @@ def setup_handlers(bot):
         query = test_query if test_query else message.text
         save_dialog_message(chat_id, "user", query)
 
-
         # Кнопка "Stop"
         markup = types.InlineKeyboardMarkup()
         stop_button = types.InlineKeyboardButton(
@@ -494,11 +492,13 @@ def setup_handlers(bot):
 
         try:
             model = genai.GenerativeModel(model_name)
-            response = model.generate_content(dialog_sessions[chat_id])
+            messages = []
+            for item in dialog_sessions[chat_id]:
+                messages.append(item)
+            response = model.generate_content(messages)
 
             response_text = response.text
             save_dialog_message(chat_id, "model", response_text)
-
 
             max_length = 4000
             generated_text = ""
@@ -517,9 +517,6 @@ def setup_handlers(bot):
                 bot.edit_message_text(
                     formatted_text, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
                 time.sleep(0.5)
-
-            dialog_sessions[chat_id].append(
-                {"role": "model", "parts": [response_text]})
             bot.edit_message_reply_markup(
                 chat_id, sent_message.message_id, reply_markup=None)
 
@@ -528,6 +525,7 @@ def setup_handlers(bot):
 
         except Exception as e:
             bot.send_message(chat_id, f"Ошибка: {str(e)}")
+
 
     def translate_text(text, target_lang="en"):
         return GoogleTranslator(source="auto", target=target_lang).translate(text)
