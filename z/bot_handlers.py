@@ -22,8 +22,8 @@ import psycopg2
 from psycopg2 import sql
 import json
 
-#DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:XgFOPaWGkymuYpcXKkuSJwIlcPihcHKI@autorack.proxy.rlwy.net:36255/railway")
-DATABASE_URL = os.environ.get("DB_URL")  # Получаем URL базы данных из переменной окружения
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:XgFOPaWGkymuYpcXKkuSJwIlcPihcHKI@autorack.proxy.rlwy.net:36255/railway")
+#DATABASE_URL = os.environ.get("DB_URL")  # Получаем URL базы данных из переменной окружения
 if not DATABASE_URL:
     print("Ошибка: Не найдена переменная окружения DB_URL.  Убедитесь, что она установлена.")
     exit()  # Или используйте другое действие для обработки этой ошибки
