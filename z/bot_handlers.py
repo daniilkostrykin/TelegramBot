@@ -18,6 +18,13 @@ from g4f.client import Client
 from deep_translator import GoogleTranslator
 from telebot.types import Message
 from z.keyboards import *
+import psycopg2
+from psycopg2 import sql
+import json
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:XgFOPaWGkymuYpcXKkuSJwIlcPihcHKI@autorack.proxy.rlwy.net:36255/railway")
+conn = psycopg2.connect(DATABASE_URL)
+cursor = conn.cursor()
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +72,53 @@ def setup_handlers(bot):
         else:
             return None  # Если нет истории, возвращаем None
 
+    def create_tables():
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_states (
+                chat_id BIGINT PRIMARY KEY,
+                state TEXT[]
+            );
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dialog_sessions (
+                chat_id BIGINT PRIMARY KEY,
+                messages JSONB
+            );
+        """)
+
+        conn.commit()
+
+    def save_dialog_message(chat_id, role, content):
+        """Сохраняет сообщение в диалог пользователя (в БД и в память)."""
+
+        if chat_id not in dialog_sessions:
+            dialog_sessions[chat_id] = []
+
+        dialog_sessions[chat_id].append({"role": role, "content": content})
+
+        # Сохраняем сообщение и в БД:
+        try:
+            cursor.execute("""
+                INSERT INTO dialog_sessions (chat_id, messages) 
+                VALUES (%s, %s) 
+                ON CONFLICT (chat_id) 
+                DO UPDATE SET messages = dialog_sessions.messages || EXCLUDED.messages;
+            """, (chat_id, json.dumps([{"role": role, "content": content}])))  # Конвертируем в JSON здесь
+            conn.commit()
+        except Exception as e:
+            print(f"Ошибка при сохранении в БД: {e}")
+
+
+    def get_dialog_history(chat_id):
+        """Получает всю историю диалога из БД."""
+        cursor.execute("SELECT messages FROM dialog_sessions WHERE chat_id = %s", (chat_id,))
+        result = cursor.fetchone()
+
+        if result:
+            return json.loads(result[0])  # Преобразуем JSON обратно в список Python
+        return []
+
 
     @bot.message_handler(commands=['user_states'])
     def show_user_states(message):
@@ -80,7 +134,17 @@ def setup_handlers(bot):
             bot.send_message(message.chat.id, "🚫 У вас нет прав для использования этой команды.")
             return
 
-        bot.send_message(message.chat.id, f"💬 *История диалогов:*\n{dialog_sessions}", parse_mode="Markdown")
+        cursor.execute("SELECT * FROM dialog_sessions")
+        users = cursor.fetchall()
+
+        text = "💬 *История диалогов:*\n\n"
+        for chat_id, messages in users:
+            text += f"🔹 `{chat_id}`:\n"
+            dialog = json.loads(messages)
+            for msg in dialog[-5:]:  # Показываем последние 5 сообщений
+                text += f"  - *{msg['role']}*: {msg['content'][:100]}...\n"
+
+        bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
     @bot.message_handler(commands=['active_generations'])
     def show_active_generations(message):
@@ -106,10 +170,10 @@ def setup_handlers(bot):
                              reply_markup=get_text_image_button())
         elif previous_state == 'text_voice':
              bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_text_voice_keyboard())   
+                             reply_markup=get_text_voice_keyboard())
         elif previous_state == 'nocode':
              bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_nocode_keyboard())            
+                             reply_markup=get_nocode_keyboard())
         elif previous_state == 'gemini_model_selection':
             bot.send_message(message.chat.id, "⬅️ Назад",
                              reply_markup=get_gemini_model_keyboard())
@@ -122,7 +186,7 @@ def setup_handlers(bot):
         elif previous_state == 'photo':
             bot.send_message(message.chat.id, "⬅️ Назад",
                              reply_markup=get_photo_keyboard())
-                
+
         else:
             bot.send_message(message.chat.id, "⬅️ Назад",
                              reply_markup=get_main_keyboard())
@@ -294,6 +358,7 @@ def setup_handlers(bot):
             return
 
         query = message.text
+        save_dialog_message(chat_id, "user", query)
 
         if chat_id not in g4f_dialog_sessions:
             g4f_dialog_sessions[chat_id] = []
@@ -313,6 +378,7 @@ def setup_handlers(bot):
 
         try:
             response = g4f_bot.ask(query)
+            save_dialog_message(chat_id, "assistant", response)
 
             # Постепенная отправка текста
             response_text = response
@@ -382,7 +448,7 @@ def setup_handlers(bot):
         save_user_state(message.chat.id, 'gemini_dialog')
         bot.register_next_step_handler(
             message, handle_dialog, model_name=model_name)
-    
+
 
     def handle_dialog(message, model_name, test_query=None):
         chat_id = message.chat.id
@@ -406,11 +472,8 @@ def setup_handlers(bot):
             return
 
         query = test_query if test_query else message.text
+        save_dialog_message(chat_id, "user", query)
 
-        if chat_id not in dialog_sessions:
-            dialog_sessions[chat_id] = []
-
-        dialog_sessions[chat_id].append({"role": "user", "parts": [query]})
 
         # Кнопка "Stop"
         markup = types.InlineKeyboardMarkup()
@@ -427,6 +490,9 @@ def setup_handlers(bot):
             response = model.generate_content(dialog_sessions[chat_id])
 
             response_text = response.text
+            save_dialog_message(chat_id, "model", response_text)
+
+
             max_length = 4000
             generated_text = ""
 
@@ -478,6 +544,8 @@ def setup_handlers(bot):
 
             return
         translated_text = translate_text(message.text)
+        save_dialog_message(chat_id, "user", translated_text)
+
 
         # Отправляем сообщение с анимацией загрузки
         loading_message = bot.send_message(
@@ -605,7 +673,7 @@ def setup_handlers(bot):
         if score > 70:
             return POPULAR_SITES[closest_match]
         return None
-    
+
 
 
     def handle_ai_category(message, category, text, keyboard):
@@ -615,7 +683,7 @@ def setup_handlers(bot):
     @bot.message_handler(func=lambda message: message.text == 'Текст-Текст')
     def handle_ai_text_text(message):
         handle_ai_category(
-            message, 'text_text', 
+            message, 'text_text',
             """📄 *Категория: Текст-Текст*
 
             Нейросети для работы с текстом:
@@ -625,21 +693,21 @@ def setup_handlers(bot):
             - *Microsoft Copilot* – помощник для программистов.
             - *Github Copilot* – помощник для программистов.
 
-            Выберите модель:""", 
+            Выберите модель:""",
             get_text_text_button()
         )
 
     @bot.message_handler(func=lambda message: message.text == 'Текст-Изображение')
     def handle_ai_text_image(message):
         handle_ai_category(
-            message, 'text_image', 
+            message, 'text_image',
             """🖼️ *Категория: Текст-Изображение*
 
             Нейросети для генерации изображений:
             - *Midjourney* – создание детализированных картинок.
-        
 
-            Выберите сервис:""", 
+
+            Выберите сервис:""",
             get_text_image_button()
         )
 
