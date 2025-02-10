@@ -28,11 +28,23 @@ if not DATABASE_URL:
     print("Ошибка: Не найдена переменная окружения DB_URL.  Убедитесь, что она установлена.")
     exit()  # Или используйте другое действие для обработки этой ошибки
 
+def create_tables():
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS dialog_sessions (
+            chat_id BIGINT PRIMARY KEY,
+            messages JSONB
+        );
+    """)
+    print("Database table dialog_sessions created successfully")
+    conn.commit()
+
 conn = None  # Инициализируем conn вне блока try
 try:
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     print("Успешно подключено к базе данных!")  # Выводим сообщение об успешном подключении
+    create_tables()
 except psycopg2.Error as e:
     print(f"Ошибка при подключении к базе данных: {e}")
 
@@ -83,16 +95,6 @@ def setup_handlers(bot):
         else:
             return None  # Если нет истории, возвращаем None
 
-    def create_tables():
-
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS dialog_sessions (
-                chat_id BIGINT PRIMARY KEY,
-                messages JSONB
-            );
-        """)
-
-        conn.commit()
 
     def save_dialog_message(chat_id, role, content):
         """Сохраняет сообщение в диалог пользователя (в БД и в память)."""
