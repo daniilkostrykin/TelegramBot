@@ -9,7 +9,7 @@ import logging
 import webbrowser
 import subprocess
 import os
-from z.config import POPULAR_SITES
+from z.config import ADMIN_ID, POPULAR_SITES
 import google.generativeai as genai
 from z.config import GEMINI_API_KEY, BOT_TOKEN
 from fuzzywuzzy import process
@@ -64,6 +64,31 @@ def setup_handlers(bot):
             return user_states[chat_id][-1]  # Возвращаем предыдущее
         else:
             return None  # Если нет истории, возвращаем None
+
+
+    @bot.message_handler(commands=['user_states'])
+    def show_user_states(message):
+        if message.from_user.id != ADMIN_ID:
+            bot.send_message(message.chat.id, "🚫 У вас нет прав для использования этой команды.")
+            return
+
+        bot.send_message(message.chat.id, f"👥 *Состояния пользователей:*\n{user_states}", parse_mode="Markdown")
+
+    @bot.message_handler(commands=['dialog_sessions'])
+    def show_dialog_sessions(message):
+        if message.from_user.id != ADMIN_ID:
+            bot.send_message(message.chat.id, "🚫 У вас нет прав для использования этой команды.")
+            return
+
+        bot.send_message(message.chat.id, f"💬 *История диалогов:*\n{dialog_sessions}", parse_mode="Markdown")
+
+    @bot.message_handler(commands=['active_generations'])
+    def show_active_generations(message):
+        if message.from_user.id != ADMIN_ID:
+            bot.send_message(message.chat.id, "🚫 У вас нет прав для использования этой команды.")
+            return
+
+        bot.send_message(message.chat.id, f"⚙️ *Активные генерации:*\n{active_generations}", parse_mode="Markdown")
 
     @bot.message_handler(func=lambda message: message.text == '⬅️ Назад')
     def back(message):
