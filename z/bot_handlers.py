@@ -199,6 +199,12 @@ def setup_handlers(bot):
         elif previous_state == 'photo':
             bot.send_message(message.chat.id, "⬅️ Назад",
                              reply_markup=get_photo_keyboard())
+        elif previous_state == 'gemini_dialog':
+            bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_gemini_model_keyboard())
+        elif previous_state == 'g4f_dialog':
+            bot.send_message(message.chat.id, "⬅️ Назад",
+                             reply_markup=get_g4f_model_keyboard())
 
         else:
             bot.send_message(message.chat.id, "⬅️ Назад",
@@ -313,7 +319,9 @@ def setup_handlers(bot):
 
     def handle_g4f_model_selection(message):
         if message.text == '⬅️ Назад':
-            choose_ai(message)
+            bot.send_message(
+                message.chat.id, "Возврат в меню выбора AI.", reply_markup=get_ai_selection_keyboard()) # Исправлено
+            save_user_state(message.chat.id, 'ai_selection') # Исправлено
             return
 
         model_mapping = {
@@ -338,7 +346,8 @@ def setup_handlers(bot):
         action = message.text
         if action == '📂 Открыть папку':
             # УДАЛЕНО: "Введите путь к папке."
-            bot.send_message(message.chat.id, "Функция недоступна на сервере.")
+            bot.send_message(message.chat.id, "Функция недоступна на сервере.",
+                             reply_markup=get_main_keyboard())
             save_user_state(message.chat.id, 'main_menu')  # Сохраняем состояние
             # УДАЛЕНО: bot.register_next_step_handler(message, handle_open_folder)
 
@@ -429,6 +438,11 @@ def setup_handlers(bot):
             bot.send_message(chat_id, f"Ошибка: {str(e)}")
 
     def handle_model_selection(message):
+        if message.text == '⬅️ Назад':
+            bot.send_message(
+                message.chat.id, "Возврат в меню выбора AI.", reply_markup=get_ai_selection_keyboard())
+            save_user_state(message.chat.id, 'ai_selection')
+            return
         if message.text == 'Gemini 2.0 Experimental':
             model_name = 'gemini-2.0-flash-exp'
         elif message.text == 'Gemini 1.5 Pro':
@@ -443,11 +457,6 @@ def setup_handlers(bot):
             model_name = 'gemini-2.0-flash-lite-preview-02-05'
         elif message.text == 'Gemini 2.0 Flash':
             model_name = 'gemini-2.0-flash'
-        elif message.text == '⬅️ Назад':
-            bot.send_message(
-                message.chat.id, "Возврат в меню выбора AI.", reply_markup=get_ai_selection_keyboard())
-            save_user_state(message.chat.id, 'ai_selection')
-            return
         else:
             bot.send_message(
                 message.chat.id, "Неверный выбор модели. Попробуйте снова.")
