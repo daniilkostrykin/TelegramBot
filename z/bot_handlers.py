@@ -94,33 +94,33 @@ def setup_handlers(bot):
             return user_states[chat_id][-1]  # Возвращаем предыдущее
         else:
             return None  # Если нет истории, возвращаем None
-
-    def save_dialog_message(chat_id, role, content, ai_name="Unknown AI"):
-        """Сохраняет сообщение в диалог пользователя (в БД и в память)."""
+        
+    def save_dialog_message(chat_id, role, content, ai_name):
+        """Сохраняет сообщение в диалог пользователя и нейросети (в БД и в память)."""
 
         if chat_id not in dialog_sessions:
-            dialog_sessions[chat_id] = {
+            dialog_sessions[chat_id] = {}
+
+        if ai_name not in dialog_sessions[chat_id]:
+            dialog_sessions[chat_id][ai_name] = {
                 "ai_name": ai_name,
                 "messages": []
             }
-        else:
-            if dialog_sessions[chat_id].get("ai_name") == "Unknown AI":
-                dialog_sessions[chat_id]["ai_name"] = ai_name
 
-        dialog_sessions[chat_id]["messages"].append({"role": role, "parts": [content]})
+        # Изменяем формат сохраняемого сообщения
+        dialog_sessions[chat_id][ai_name]["messages"].append({"role": role, "parts": [content]})
 
         # Сохраняем сообщение и в БД:
         try:
             cursor.execute("""
                 INSERT INTO dialog_sessions (chat_id, messages, ai_name)
                 VALUES (%s, %s, %s)
-                ON CONFLICT (chat_id)
-                DO UPDATE SET messages = dialog_sessions.messages || EXCLUDED.messages, ai_name = %s;
-            """, (chat_id, json.dumps([{"role": role, "parts": [content]}], ensure_ascii=False), ai_name, ai_name)) 
+                ON CONFLICT (chat_id, ai_name) DO UPDATE SET messages = dialog_sessions.messages || EXCLUDED.messages;
+            """, (chat_id, json.dumps([{"role": role, "parts": [content]}], ensure_ascii=False), ai_name))
             conn.commit()
         except Exception as e:
             print(f"Ошибка при сохранении в БД: {e}")
-
+            
     def get_dialog_history(chat_id):
         """Получает всю историю диалога из БД."""
         cursor.execute("SELECT messages FROM dialog_sessions WHERE chat_id = %s", (chat_id,))
