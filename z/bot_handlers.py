@@ -95,27 +95,32 @@ def setup_handlers(bot):
         else:
             return None  # Если нет истории, возвращаем None
 
-    def save_dialog_message(chat_id, role, content):
+    def save_dialog_message(chat_id, role, content, ai_name="Unknown AI"):
         """Сохраняет сообщение в диалог пользователя (в БД и в память)."""
 
         if chat_id not in dialog_sessions:
-            dialog_sessions[chat_id] = []
+            dialog_sessions[chat_id] = {
+                "ai_name": ai_name,
+                "messages": []
+            }
+        else:
+            if dialog_sessions[chat_id].get("ai_name") == "Unknown AI":
+                dialog_sessions[chat_id]["ai_name"] = ai_name
 
-        # Изменяем формат сохраняемого сообщения
-        dialog_sessions[chat_id].append({"role": role, "parts": [content]})
+        dialog_sessions[chat_id]["messages"].append({"role": role, "parts": [content]})
 
         # Сохраняем сообщение и в БД:
         try:
             cursor.execute("""
-                INSERT INTO dialog_sessions (chat_id, messages)
-                VALUES (%s, %s)
+                INSERT INTO dialog_sessions (chat_id, messages, ai_name)
+                VALUES (%s, %s, %s)
                 ON CONFLICT (chat_id)
-                DO UPDATE SET messages = dialog_sessions.messages || EXCLUDED.messages;
-            """, (chat_id, json.dumps([{"role": role, "parts": [content]}], ensure_ascii=False)))  # Конвертируем в JSON здесь
+                DO UPDATE SET messages = dialog_sessions.messages || EXCLUDED.messages, ai_name = %s;
+            """, (chat_id, json.dumps([{"role": role, "parts": [content]}], ensure_ascii=False), ai_name, ai_name)) 
             conn.commit()
         except Exception as e:
             print(f"Ошибка при сохранении в БД: {e}")
-        
+
     def get_dialog_history(chat_id):
         """Получает всю историю диалога из БД."""
         cursor.execute("SELECT messages FROM dialog_sessions WHERE chat_id = %s", (chat_id,))
@@ -364,7 +369,7 @@ def setup_handlers(bot):
             return
 
         query = message.text
-        save_dialog_message(chat_id, "user", query)
+        save_dialog_message(chat_id, "user", query, 'g4f')
 
         if chat_id not in g4f_dialog_sessions:
             g4f_dialog_sessions[chat_id] = []
@@ -384,7 +389,7 @@ def setup_handlers(bot):
 
         try:
             response = g4f_bot.ask(query)
-            save_dialog_message(chat_id, "assistant", response)
+            save_dialog_message(chat_id, "assistant", response, 'g4f')
 
             # Постепенная отправка текста
             response_text = response
@@ -478,7 +483,7 @@ def setup_handlers(bot):
             return
 
         query = test_query if test_query else message.text
-        save_dialog_message(chat_id, "user", query)
+        save_dialog_message(chat_id, "user", query, 'gemini')
 
         # Кнопка "Stop"
         markup = types.InlineKeyboardMarkup()
@@ -498,7 +503,7 @@ def setup_handlers(bot):
             response = model.generate_content(messages)
 
             response_text = response.text
-            save_dialog_message(chat_id, "model", response_text)
+            save_dialog_message(chat_id, "assistant", response_text, 'gemini')
 
             max_length = 4000
             generated_text = ""
@@ -549,7 +554,7 @@ def setup_handlers(bot):
 
             return
         translated_text = translate_text(message.text)
-        save_dialog_message(chat_id, "user", translated_text)
+        save_dialog_message(chat_id, "user", message.text, 'midjourney')
 
 
         # Отправляем сообщение с анимацией загрузки
