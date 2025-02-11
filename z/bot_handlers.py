@@ -31,10 +31,12 @@ if not DATABASE_URL:
 def create_tables():
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS dialog_sessions (
-            chat_id BIGINT PRIMARY KEY,
-            messages JSONB
-        );
+    CREATE TABLE IF NOT EXISTS dialog_sessions (
+        chat_id BIGINT,
+        ai_name TEXT,
+        messages JSONB,
+        PRIMARY KEY (chat_id, ai_name)
+    );
     """)
     print("Database table dialog_sessions created successfully")
     conn.commit()
