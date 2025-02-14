@@ -31,12 +31,10 @@ if not DATABASE_URL:
 def create_tables():
 
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS dialog_sessions (
-        chat_id BIGINT,
-        ai_name TEXT,
-        messages JSONB,
-        PRIMARY KEY (chat_id, ai_name)
-    );
+        CREATE TABLE IF NOT EXISTS dialog_sessions (
+            chat_id BIGINT PRIMARY KEY,
+            messages JSONB
+        );
     """)
     print("Database table dialog_sessions created successfully")
     conn.commit()
@@ -96,33 +94,28 @@ def setup_handlers(bot):
             return user_states[chat_id][-1]  # Возвращаем предыдущее
         else:
             return None  # Если нет истории, возвращаем None
-        
-    def save_dialog_message(chat_id, role, content, ai_name):
-        """Сохраняет сообщение в диалог пользователя и нейросети (в БД и в память)."""
+
+    def save_dialog_message(chat_id, role, content):
+        """Сохраняет сообщение в диалог пользователя (в БД и в память)."""
 
         if chat_id not in dialog_sessions:
-            dialog_sessions[chat_id] = {}
-
-        if ai_name not in dialog_sessions[chat_id]:
-            dialog_sessions[chat_id][ai_name] = {
-                "ai_name": ai_name,
-                "messages": []
-            }
+            dialog_sessions[chat_id] = []
 
         # Изменяем формат сохраняемого сообщения
-        dialog_sessions[chat_id][ai_name]["messages"].append({"role": role, "parts": [content]})
+        dialog_sessions[chat_id].append({"role": role, "parts": [content]})
 
         # Сохраняем сообщение и в БД:
         try:
             cursor.execute("""
-                INSERT INTO dialog_sessions (chat_id, messages, ai_name)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (chat_id, ai_name) DO UPDATE SET messages = dialog_sessions.messages || EXCLUDED.messages;
-            """, (chat_id, json.dumps([{"role": role, "parts": [content]}], ensure_ascii=False), ai_name))
+                INSERT INTO dialog_sessions (chat_id, messages)
+                VALUES (%s, %s)
+                ON CONFLICT (chat_id)
+                DO UPDATE SET messages = dialog_sessions.messages || EXCLUDED.messages;
+            """, (chat_id, json.dumps([{"role": role, "parts": [content]}], ensure_ascii=False)))  # Конвертируем в JSON здесь
             conn.commit()
         except Exception as e:
             print(f"Ошибка при сохранении в БД: {e}")
-            
+        
     def get_dialog_history(chat_id):
         """Получает всю историю диалога из БД."""
         cursor.execute("SELECT messages FROM dialog_sessions WHERE chat_id = %s", (chat_id,))
@@ -199,12 +192,6 @@ def setup_handlers(bot):
         elif previous_state == 'photo':
             bot.send_message(message.chat.id, "⬅️ Назад",
                              reply_markup=get_photo_keyboard())
-        elif previous_state == 'gemini_dialog':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_gemini_model_keyboard())
-        elif previous_state == 'g4f_dialog':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_g4f_model_keyboard())
 
         else:
             bot.send_message(message.chat.id, "⬅️ Назад",
@@ -319,9 +306,7 @@ def setup_handlers(bot):
 
     def handle_g4f_model_selection(message):
         if message.text == '⬅️ Назад':
-            bot.send_message(
-                message.chat.id, "Возврат в меню выбора AI.", reply_markup=get_ai_selection_keyboard()) # Исправлено
-            save_user_state(message.chat.id, 'ai_selection') # Исправлено
+            choose_ai(message)
             return
 
         model_mapping = {
@@ -346,8 +331,7 @@ def setup_handlers(bot):
         action = message.text
         if action == '📂 Открыть папку':
             # УДАЛЕНО: "Введите путь к папке."
-            bot.send_message(message.chat.id, "Функция недоступна на сервере.",
-                             reply_markup=get_main_keyboard())
+            bot.send_message(message.chat.id, "Функция недоступна на сервере.")
             save_user_state(message.chat.id, 'main_menu')  # Сохраняем состояние
             # УДАЛЕНО: bot.register_next_step_handler(message, handle_open_folder)
 
@@ -380,7 +364,7 @@ def setup_handlers(bot):
             return
 
         query = message.text
-        save_dialog_message(chat_id, "user", query, 'g4f')
+        save_dialog_message(chat_id, "user", query)
 
         if chat_id not in g4f_dialog_sessions:
             g4f_dialog_sessions[chat_id] = []
@@ -400,7 +384,7 @@ def setup_handlers(bot):
 
         try:
             response = g4f_bot.ask(query)
-            save_dialog_message(chat_id, "assistant", response, 'g4f')
+            save_dialog_message(chat_id, "assistant", response)
 
             # Постепенная отправка текста
             response_text = response
@@ -438,11 +422,6 @@ def setup_handlers(bot):
             bot.send_message(chat_id, f"Ошибка: {str(e)}")
 
     def handle_model_selection(message):
-        if message.text == '⬅️ Назад':
-            bot.send_message(
-                message.chat.id, "Возврат в меню выбора AI.", reply_markup=get_ai_selection_keyboard())
-            save_user_state(message.chat.id, 'ai_selection')
-            return
         if message.text == 'Gemini 2.0 Experimental':
             model_name = 'gemini-2.0-flash-exp'
         elif message.text == 'Gemini 1.5 Pro':
@@ -457,6 +436,11 @@ def setup_handlers(bot):
             model_name = 'gemini-2.0-flash-lite-preview-02-05'
         elif message.text == 'Gemini 2.0 Flash':
             model_name = 'gemini-2.0-flash'
+        elif message.text == '⬅️ Назад':
+            bot.send_message(
+                message.chat.id, "Возврат в меню выбора AI.", reply_markup=get_ai_selection_keyboard())
+            save_user_state(message.chat.id, 'ai_selection')
+            return
         else:
             bot.send_message(
                 message.chat.id, "Неверный выбор модели. Попробуйте снова.")
@@ -494,7 +478,7 @@ def setup_handlers(bot):
             return
 
         query = test_query if test_query else message.text
-        save_dialog_message(chat_id, "user", query, 'gemini')
+        save_dialog_message(chat_id, "user", query)
 
         # Кнопка "Stop"
         markup = types.InlineKeyboardMarkup()
@@ -514,7 +498,7 @@ def setup_handlers(bot):
             response = model.generate_content(messages)
 
             response_text = response.text
-            save_dialog_message(chat_id, "assistant", response_text, 'gemini')
+            save_dialog_message(chat_id, "model", response_text)
 
             max_length = 4000
             generated_text = ""
@@ -565,7 +549,7 @@ def setup_handlers(bot):
 
             return
         translated_text = translate_text(message.text)
-        save_dialog_message(chat_id, "user", message.text, 'midjourney')
+        save_dialog_message(chat_id, "user", translated_text)
 
 
         # Отправляем сообщение с анимацией загрузки
