@@ -140,7 +140,6 @@ def setup_handlers(bot):
 
         return text
 
-
     def remove_docstrings(text):
         """Удаляет текст между `"""  """`, включая сами кавычки."""
         return re.sub(r'""".*?"""', '', text, flags=re.DOTALL)
