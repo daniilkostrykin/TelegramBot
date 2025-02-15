@@ -271,24 +271,13 @@ def setup_handlers(bot):
 
         g4f_dialog_sessions[chat_id].append({"role": "user", "content": query})
 
-        # Отправляем сообщение с кнопкой "Stop"
-        markup = types.InlineKeyboardMarkup()
-        stop_button = types.InlineKeyboardButton(
-            "⏹️ Stop", callback_data=f"stop_{chat_id}")
-        markup.add(stop_button)
-
         sent_message = bot.send_message(
-            chat_id, "Генерация ответа...", reply_markup=markup)
+            chat_id, "Генерация ответа...")
 
         active_generations[chat_id] = True  # Помечаем генерацию активной
 
         try:
             response = g4f_bot.ask(query)
-
-            if not active_generations.get(chat_id, False):
-                bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
-                return  # Выходим сразу, не сохраняем ответ
-
             save_dialog_message(chat_id, "g4f", "assistant", response)
 
             response_text = response
@@ -297,10 +286,8 @@ def setup_handlers(bot):
             formatted_chunk = ""  # <-- Инициализируем переменную заранее
 
             for i in range(0, len(response_text), max_length):
-                # 🔥 Проверяем на каждом шаге, не нажал ли пользователь "Stop"
-                if not active_generations.get(chat_id, False):
-                    bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
-                    return  # Выходим сразу, НЕ отправляем оставшиеся части
+                # Если нажали "Stop"
+
 
                 chunk = response_text[i:i + max_length]
                 generated_text += chunk
@@ -310,18 +297,14 @@ def setup_handlers(bot):
                 if new_formatted_chunk != formatted_chunk:
                     formatted_chunk = new_formatted_chunk
                     bot.edit_message_text(
-                        formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
+                        formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML')
 
                 time.sleep(0.5)  # Избегаем флуда
 
-            # ✅ Если генерация не была остановлена — сохраняем ответ
-            if active_generations.get(chat_id, False):
-                g4f_dialog_sessions[chat_id].append(
-                    {"role": "assistant", "content": response_text})
-
-                # Убираем кнопку Stop после завершения
-                bot.edit_message_reply_markup(
-                    chat_id, sent_message.message_id, reply_markup=None)
+            # Добавляем ответ в историю
+            g4f_dialog_sessions[chat_id].append(
+                {"role": "assistant", "content": response_text})
+            bot.delete_message(chat_id, sent_message.message_id)
 
             bot.register_next_step_handler(message, handle_g4f_dialog)
 
