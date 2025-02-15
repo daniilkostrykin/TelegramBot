@@ -209,12 +209,7 @@ def setup_handlers(bot):
             query = test_query if test_query else message.text
             save_dialog_message(chat_id, model_name, "user", query)
 
-            # Кнопка "Stop"
-            markup = types.InlineKeyboardMarkup()
-            stop_button = types.InlineKeyboardButton("⏹️ Stop", callback_data=f"stop_{chat_id}")
-            markup.add(stop_button)
-
-            sent_message = bot.send_message(chat_id, "Генерация ответа...", reply_markup=markup)
+            sent_message = bot.send_message(chat_id, "Генерация ответа...")
             active_generations[chat_id] = True
 
             try:
@@ -233,6 +228,7 @@ def setup_handlers(bot):
 
                 # ✅ Используем send_long_message для обхода лимита 4000 символов
                 send_long_message(chat_id, formatted_text, bot, parse_mode="HTML")
+                bot.delete_message(chat_id, sent_message.message_id)
 
             except Exception as e:
                 logger.error(f"Ошибка генерации контента: {type(e).__name__} - {str(e)}")
