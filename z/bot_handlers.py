@@ -230,7 +230,7 @@ def setup_handlers(bot):
                 send_long_message(chat_id, formatted_text, bot, parse_mode="HTML")
                 bot.delete_message(chat_id, sent_message.message_id)
                 bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
-                
+
             except Exception as e:
                 logger.error(f"Ошибка генерации контента: {type(e).__name__} - {str(e)}")
                 bot.send_message(chat_id, f"Произошла ошибка генерации контента: {str(e)}/nПожалуйста, попробуйте снова.")
@@ -247,7 +247,7 @@ def setup_handlers(bot):
 
         if message.text == '⏹️ Завершить диалог':
             bot.send_message(chat_id, "Диалог завершен.",
-                             reply_markup=get_main_keyboard())
+                            reply_markup=get_main_keyboard())
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
             if chat_id in user_states:
@@ -257,7 +257,7 @@ def setup_handlers(bot):
 
         elif message.text == '⬅️ Назад':
             bot.send_message(chat_id, "Возврат в меню выбора G4F модели.",
-                             reply_markup=get_g4f_model_keyboard())
+                            reply_markup=get_g4f_model_keyboard())
             save_user_state(chat_id, 'g4f_model_selection')
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
@@ -271,7 +271,7 @@ def setup_handlers(bot):
 
         g4f_dialog_sessions[chat_id].append({"role": "user", "content": query})
 
-        # Отправляем пустое сообщение с кнопкой "Stop"
+        # Отправляем сообщение с кнопкой "Stop"
         markup = types.InlineKeyboardMarkup()
         stop_button = types.InlineKeyboardButton(
             "⏹️ Stop", callback_data=f"stop_{chat_id}")
@@ -286,10 +286,10 @@ def setup_handlers(bot):
             response = g4f_bot.ask(query)
             save_dialog_message(chat_id, "g4f", "assistant", response)
 
-            # Постепенная отправка текста
             response_text = response
             max_length = 4000  # Telegram ограничение
             generated_text = ""
+            formatted_chunk = ""  # <-- Инициализируем переменную заранее
 
             for i in range(0, len(response_text), max_length):
                 # Если нажали "Stop"
@@ -300,13 +300,15 @@ def setup_handlers(bot):
 
                 chunk = response_text[i:i + max_length]
                 generated_text += chunk
-                formatted_chunk = format_telegram_text(generated_text)
+                new_formatted_chunk = format_telegram_text(generated_text)
 
-                # Редактируем предыдущее сообщение
-                bot.edit_message_text(
-                    formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
-                # Даем время для редактирования, чтобы избежать флуда
-                time.sleep(0.5)
+                # 🔥 Проверяем, изменился ли текст перед обновлением
+                if new_formatted_chunk != formatted_chunk:
+                    formatted_chunk = new_formatted_chunk
+                    bot.edit_message_text(
+                        formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
+
+                time.sleep(0.5)  # Избегаем флуда
 
             # Добавляем ответ в историю
             g4f_dialog_sessions[chat_id].append(
@@ -319,28 +321,23 @@ def setup_handlers(bot):
             bot.register_next_step_handler(message, handle_g4f_dialog)
 
         except telebot.apihelper.ApiTelegramException as e:
-            error_message = f"Ошибка Telegram API при отправке сообщения: {type(e).__name__} - {str(e)}\n"
+            error_message = f"Ошибка Telegram API: {type(e).__name__} - {str(e)}"
             logger.error(error_message)
             print(error_message)
 
-            # Попробуем убрать форматирование и повторить отправку
-            # Удаляем все HTML-теги
-            plain_text = re.sub(r'<[^>]+>', '', formatted_chunk)
+            # ✅ Убедимся, что переменная существует перед использованием
+            plain_text = re.sub(r'<[^>]+>', '', formatted_chunk) if formatted_chunk else response_text
 
             try:
-                # Отправляем без форматирования
                 bot.send_message(chat_id, plain_text)
             except telebot.apihelper.ApiTelegramException as e2:
-                logger.error(
-                    f"Повторная ошибка при отправке без форматирования: {e2}")
-                bot.send_message(
-                    chat_id, "Произошла ошибка при отправке сообщения. Пожалуйста, попробуйте позже.")
+                logger.error(f"Повторная ошибка при отправке без форматирования: {e2}")
+                bot.send_message(chat_id, "Ошибка при отправке сообщения. Попробуйте позже.")
 
-            # Перезапускаем обработчик диалога
             bot.register_next_step_handler(message, handle_g4f_dialog)
 
         except Exception as e:
-            bot.send_message(chat_id, f"Ошибка: {str(e)}. Попробуй снова)")
+            bot.send_message(chat_id, f"Ошибка: {str(e)}. Попробуйте снова)")
             bot.register_next_step_handler(message, handle_g4f_dialog)
 
     def safe_edit_message(bot, chat_id, message_id, new_text, reply_markup=None):
