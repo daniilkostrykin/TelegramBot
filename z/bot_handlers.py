@@ -129,8 +129,7 @@ def setup_handlers(bot):
         # 5. Делаем `инлайн-код` моноширинным
         text = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', text)
 
-        # 6. Убираем `<b>` и `<i>` внутри `<code>`
-        #text = remove_formatting_inside_code(text)
+        text = remove_formatting_inside_code(text)
 
         # 7. Обрабатываем блоки кода (```python → <pre><code>)
         text = re.sub(r'```(?:python)?(.*?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
@@ -144,8 +143,31 @@ def setup_handlers(bot):
         """Удаляет текст между `"""  """`, включая сами кавычки."""
         return re.sub(r'""".*?"""', '', text, flags=re.DOTALL)
 
-
     def remove_formatting_inside_code(text):
+        """
+        Удаляет все HTML-теги внутри <code> и <pre>, оставляя только текст.
+        """
+
+        # 1. Удаляем теги внутри <code>
+        def clean_code(match):
+            """Удаляет HTML-теги внутри <code>"""
+            content = re.sub(r'<.*?>', '', match.group(1))  # Убираем любые HTML-теги
+            return f"<code>{content}</code>"
+
+        text = re.sub(r'<code>(.*?)</code>', clean_code, text, flags=re.DOTALL)
+
+        # 2. Удаляем теги внутри <pre>
+        def clean_pre(match):
+            """Удаляет HTML-теги внутри <pre>"""
+            content = re.sub(r'<.*?>', '', match.group(1))  # Убираем любые HTML-теги
+            return f"<pre>{content}</pre>"
+
+        text = re.sub(r'<pre>(.*?)</pre>', clean_pre, text, flags=re.DOTALL)
+
+        return text
+
+
+    def remove_formatting_inside(text):
         """
         Если внутри `<b>` или `<i>` есть `<code>`, удаляет `<b>` и `<i>`, оставляя только `<code>`.
         """
