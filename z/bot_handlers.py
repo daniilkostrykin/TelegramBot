@@ -400,41 +400,39 @@ def setup_handlers(bot):
     def save_dialog_message(chat_id, ai_name, role, content):
         """Сохраняет сообщение в диалог пользователя (в БД и в память)."""
 
-        print(
-            f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}")
+        print(f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}")
 
+        # Проверяем, есть ли уже диалог в памяти
         if (chat_id, ai_name) not in dialog_sessions:
             dialog_sessions[(chat_id, ai_name)] = []
-            print(
-                f"[LOG] Создан новый ключ в dialog_sessions для ({chat_id}, {ai_name})")
+            print(f"[LOG] Создан новый ключ в dialog_sessions для ({chat_id}, {ai_name})")
 
         # Добавляем сообщение в локальный кэш
-        dialog_sessions[(chat_id, ai_name)].append(
-            {"role": role, "parts": [content]})
-        print(
-            f"[LOG] Обновленный dialog_sessions[{(chat_id, ai_name)}]: {dialog_sessions[(chat_id, ai_name)]}")
+        dialog_sessions[(chat_id, ai_name)].append({"role": role, "parts": [content]})
+        print(f"[LOG] Обновленный dialog_sessions[{(chat_id, ai_name)}]: {dialog_sessions[(chat_id, ai_name)]}")
 
         # Получаем текущую историю сообщений из БД
         try:
             cursor.execute(
-                "SELECT messages FROM dialog_sessions WHERE chat_id = %s AND ai_name = %s", (chat_id, ai_name))
+                "SELECT messages FROM dialog_sessions WHERE chat_id = %s AND ai_name = %s", 
+                (chat_id, ai_name)
+            )
             result = cursor.fetchone()
+
             print(f"[LOG] Полученный результат из БД: {result}")
 
+            # Загружаем данные из БД только если они есть
+            old_messages = []
             if result and result[0]:
                 if isinstance(result[0], list):
-                    old_messages = result[0]
+                    old_messages = result[0]  # Уже список, можно использовать напрямую
                 elif isinstance(result[0], str):
                     try:
-                        old_messages = json.loads(result[0])
+                        old_messages = json.loads(result[0])  # Пробуем загрузить JSON
                     except json.JSONDecodeError:
-                        old_messages = []
-                else:
-                    old_messages = []
-            else:
-                old_messages = []
+                        old_messages = []  # Если сломан JSON, начинаем с пустого списка
 
-            # Добавляем новое сообщение к истории
+            # Объединяем старые и новые сообщения
             new_messages = old_messages + [{"role": role, "parts": [content]}]
             print(f"[LOG] Сформирован новый список сообщений: {new_messages}")
 
@@ -452,6 +450,7 @@ def setup_handlers(bot):
         except Exception as e:
             print(f"[ERROR] Ошибка при сохранении в БД: {e}")
             print(traceback.format_exc())  # Выводим полный стек ошибки
+
 
     def get_dialog_history(chat_id, ai_name):
         """Получает всю историю диалога из БД."""
