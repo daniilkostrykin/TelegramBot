@@ -229,7 +229,8 @@ def setup_handlers(bot):
                 # ✅ Используем send_long_message для обхода лимита 4000 символов
                 send_long_message(chat_id, formatted_text, bot, parse_mode="HTML")
                 bot.delete_message(chat_id, sent_message.message_id)
-
+                bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
+                
             except Exception as e:
                 logger.error(f"Ошибка генерации контента: {type(e).__name__} - {str(e)}")
                 bot.send_message(chat_id, f"Произошла ошибка генерации контента: {str(e)}/nПожалуйста, попробуйте снова.")
