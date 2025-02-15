@@ -9,3 +9,4 @@ g4f
 requests==2.31.0
 deep-translator==1.11.1
 psycopg2
+collections

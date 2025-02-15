@@ -23,6 +23,8 @@ import psycopg2
 from psycopg2 import sql
 import json
 import traceback
+from collections import Counter
+
 # DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:XgFOPaWGkymuYpcXKkuSJwIlcPihcHKI@autorack.proxy.rlwy.net:36255/railway")
 # Получаем URL базы данных из переменной окружения
 DATABASE_URL = os.environ.get("DB_URL")
@@ -89,51 +91,78 @@ def setup_handlers(bot):
             logger.error(f"Error in start command: {e}")
             bot.send_message(message.chat.id, 'Произошла ошибка')
 
-
-    def remove_single_asterisks(text):
-        """Удаляет только одиночные символы `*`, но сохраняет `**жирный**` и `*курсив*`."""
-        # Удаляем одиночные `*`, но не трогаем `**жирный**` и `*курсив*`
-        text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
-        
-        # Удаляем одиночные `` ` ``, но не трогаем `` `код` `` и ```блок кода```
-        text = re.sub(r'(?<!`)\`(?!`)', '', text)
-
-        return text
     @bot.message_handler(commands=['test'])
     def test(message):
         text = "* Это *не жирный* и не *курсив*, но **это жирный**, а *это курсив*."
-        clean_text = remove_single_asterisks(text)
-        bot.send_message(message.chat.id, clean_text)
         clean_text = format_telegram_text(clean_text)
+        bot.send_message(message.chat.id, clean_text)
         bot.send_message(message.chat.id, clean_text, parse_mode='HTML')
 
     def format_telegram_text(text):
-        """Исправляет разметку для Telegram"""
-        # Убираем звездочки * (если они не нужны)
-        text = remove_single_asterisks(text)
+        """
+        Форматирует текст для Telegram:
+        1. Удаляет одиночные `*` и `` ` ``, но сохраняет `**жирный**`, `*курсив*`, `` `код` `` и ```блок кода```.
+        2. Конвертирует Markdown в HTML (Telegram-совместимый).
+        3. Обрабатывает кодовые блоки (```python → <pre><code>).
+        4. Удаляет или форматирует комментарии в коде и `# комментарий`).
+        5. Проверяет незакрытые и неподдерживаемые теги.
+        """
 
-        # Markdown → HTML
-        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)  # Жирный текст
+        # 1. Удаляем одиночные `*`, но не `**жирный**` и `*курсив*`
+        text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
+
+        # 2. Удаляем одиночные `` ` ``, но не `` `код` `` и ```блок кода```
+        text = re.sub(r'(?<!`)\`(?!`)', '', text)
+
+        # 3. Markdown → HTML
+        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)  # Жирный
         text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)      # Курсив
         text = re.sub(r'__(.*?)__', r'<u>\1</u>', text)      # Подчеркнутый
         text = re.sub(r'~(.*?)~', r'<s>\1</s>', text)        # Зачеркнутый
 
-        # Обработка кода (замена ```python на <pre><code>)
-        text = re.sub(r'```python(.*?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
+        # 4. Обрабатываем блоки кода (```python → <pre><code>)
+        text = re.sub(r'```(?:python)?(.*?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
+
+        # 5. Форматируем комментарии в коде
+        text = format_comments(text)
+
+        # 6. Проверяем незакрытые теги
+        check_unmatched_tags(text)
 
         return text
 
-    def check_unmatched_tags(text):
-        """Проверяет, есть ли незакрытые HTML-теги."""
-        from collections import Counter
-        import re
 
-        tags = re.findall(r'</?(\w+)>', text)  # Находим все теги
+    def format_comments(text):
+        """
+        Форматирует комментарии:
+        1. Многострочные docstring → `<blockquote> текст </blockquote>`
+        2. Однострочные комментарии (`# текст`) → `<i># текст</i>`
+        """
+
+        # Docstring: """ текст """ → <blockquote> текст </blockquote>
+        text = re.sub(r'"""\s*(.*?)\s*"""', r'<blockquote>\1</blockquote>', text, flags=re.DOTALL)
+
+        # Однострочные комментарии: # текст → <i># текст</i>
+        text = re.sub(r'(?<=\n)#(.*)', r'<i>#\1</i>', text)
+
+        return text
+
+
+    def check_unmatched_tags(text):
+        """Ищет незакрытые или неподдерживаемые HTML-теги."""
+        tags = re.findall(r'</?(\w+)>', text)
         counts = Counter(tags)
 
         for tag in counts:
-            if counts[f"<{tag}>"] != counts[f"</{tag}>"]:
-                print(f"[ERROR] Незакрытый тег: {tag}")
+            if text.count(f"<{tag}>") != text.count(f"</{tag}>"):
+                print(f"[ERROR] Незакрытый или лишний тег: <{tag}>")
+
+        # Проверяем, есть ли неподдерживаемые теги
+        supported_tags = {"b", "i", "u", "s", "a", "code", "pre", "blockquote", "tg-spoiler"}
+        for tag in counts:
+            if tag not in supported_tags:
+                print(f"[WARNING] Неподдерживаемый тег: <{tag}>")
+
 
 
     def handle_dialog(message, model_name, test_query=None):
@@ -190,7 +219,6 @@ def setup_handlers(bot):
                     chunk = response_text[i:i + max_length]
                     generated_text += chunk
                     formatted_text = format_telegram_text(generated_text)
-                    check_unmatched_tags(formatted_text)
                     print(f"[DEBUG] Отформатированный ответ: {formatted_text}")
 
 
