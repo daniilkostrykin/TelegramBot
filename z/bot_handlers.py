@@ -172,7 +172,17 @@ def setup_handlers(bot):
             if tag not in supported_tags:
                 print(f"[WARNING] Неподдерживаемый тег: <{tag}>")
 
+    def send_long_message(chat_id, text, bot, parse_mode="HTML"):
+        """
+        Отправляет сообщение в Telegram, разбивая текст на части, если он превышает 4000 символов.
+        """
+        max_length = 3500
 
+        # Разбиваем текст на части
+        for i in range(0, len(text), max_length):
+            chunk = text[i:i + max_length]
+            bot.send_message(chat_id, chunk, parse_mode=parse_mode)
+            time.sleep(0.5)  # Делаем небольшую паузу, чтобы не перегружать API Telegram
 
 
     def handle_dialog(message, model_name, test_query=None):
@@ -218,43 +228,21 @@ def setup_handlers(bot):
                 response_text = response.text
                 save_dialog_message(chat_id, model_name, "model", response_text)
 
-                max_length = 4000
-                generated_text = ""
+                formatted_text = format_telegram_text(response_text)
+                print(f"[DEBUG] Отформатированный ответ: {formatted_text}")
 
-                for i in range(0, len(response_text), max_length):
-                    if not active_generations.get(chat_id, False):
-                        bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
-                        return
-
-                    chunk = response_text[i:i + max_length]
-                    generated_text += chunk
-                    formatted_text = format_telegram_text(generated_text)
-                    print(f"[DEBUG] Отформатированный ответ: {formatted_text}")
-
-
-                    try:
-                        bot.edit_message_text(formatted_text, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
-                        time.sleep(0.5)
-                    except telebot.apihelper.ApiTelegramException as e:
-                        logger.error(f"Ошибка Telegram API при отправке сообщения: {type(e).__name__} - {str(e)}\n")
-                        plain_text = re.sub(r'<[^>]+>', '', formatted_text)
-                        bot.send_message(chat_id, plain_text)
-
-                    except Exception as e:
-                        logger.error(f"Ошибка отправки сообщения: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}")
-                        bot.send_message(chat_id, f"Произошла ошибка: {str(e)}. Попробуйте снова.")
-                        break
-
-                    bot.edit_message_reply_markup(chat_id, sent_message.message_id, reply_markup=None)
-                    bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
+                # ✅ Используем send_long_message для обхода лимита 4000 символов
+                send_long_message(chat_id, formatted_text, bot, parse_mode="HTML")
 
             except Exception as e:
                 logger.error(f"Ошибка генерации контента: {type(e).__name__} - {str(e)}")
-                bot.send_message(chat_id, f"Произошла ошибка генерации контента: {str(e)}")
+                bot.send_message(chat_id, f"Произошла ошибка генерации контента: {str(e)}/nПожалуйста, попробуйте снова.")
+                bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
 
         except Exception as e:
             logger.error(f"Ошибка в диалоге Gemini: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}")
-            bot.send_message(message.chat.id, f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте позже.")
+            bot.send_message(message.chat.id, f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте снова.")
+            bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
 
 
     def handle_g4f_dialog(message):
@@ -357,6 +345,19 @@ def setup_handlers(bot):
         except Exception as e:
             bot.send_message(chat_id, f"Ошибка: {str(e)}. Попробуй снова)")
             bot.register_next_step_handler(message, handle_g4f_dialog)
+
+    def safe_edit_message(bot, chat_id, message_id, new_text, reply_markup=None):
+        """
+        Безопасно обновляет сообщение в Telegram.
+        Если текст не изменился, не вызывает `edit_message_text`, чтобы избежать ошибки 400.
+        """
+        try:
+            bot.edit_message_text(new_text, chat_id, message_id, parse_mode="HTML", reply_markup=reply_markup)
+        except telebot.apihelper.ApiTelegramException as e:
+            if "message is not modified" in str(e):
+                print(f"[INFO] Сообщение уже имеет нужный текст, редактирование пропущено.")
+            else:
+                raise  # Если другая ошибка, выбрасываем её
 
     def save_user_state(chat_id, state):
         """Сохраняет текущее состояние пользователя."""
