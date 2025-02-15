@@ -284,6 +284,11 @@ def setup_handlers(bot):
 
         try:
             response = g4f_bot.ask(query)
+
+            if not active_generations.get(chat_id, False):
+                bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
+                return  # Выходим сразу, не сохраняем ответ
+
             save_dialog_message(chat_id, "g4f", "assistant", response)
 
             response_text = response
@@ -292,11 +297,10 @@ def setup_handlers(bot):
             formatted_chunk = ""  # <-- Инициализируем переменную заранее
 
             for i in range(0, len(response_text), max_length):
-                # Если нажали "Stop"
+                # 🔥 Проверяем на каждом шаге, не нажал ли пользователь "Stop"
                 if not active_generations.get(chat_id, False):
-                    bot.edit_message_text(
-                        "⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
-                    return
+                    bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
+                    return  # Выходим сразу, НЕ отправляем оставшиеся части
 
                 chunk = response_text[i:i + max_length]
                 generated_text += chunk
@@ -310,13 +314,14 @@ def setup_handlers(bot):
 
                 time.sleep(0.5)  # Избегаем флуда
 
-            # Добавляем ответ в историю
-            g4f_dialog_sessions[chat_id].append(
-                {"role": "assistant", "content": response_text})
+            # ✅ Если генерация не была остановлена — сохраняем ответ
+            if active_generations.get(chat_id, False):
+                g4f_dialog_sessions[chat_id].append(
+                    {"role": "assistant", "content": response_text})
 
-            # Убираем кнопку Stop после завершения
-            bot.edit_message_reply_markup(
-                chat_id, sent_message.message_id, reply_markup=None)
+                # Убираем кнопку Stop после завершения
+                bot.edit_message_reply_markup(
+                    chat_id, sent_message.message_id, reply_markup=None)
 
             bot.register_next_step_handler(message, handle_g4f_dialog)
 
