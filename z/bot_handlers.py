@@ -102,70 +102,49 @@ def setup_handlers(bot):
 
     def format_telegram_text(text):
         """
-        Форматирует текст для Telegram:
-        1. Удаляет одиночные `*` и `` ` ``, но сохраняет `**жирный**`, `*курсив*`, `` `код` `` и ```блок кода```.
-        2. Конвертирует Markdown в HTML (Telegram-совместимый).
-        3. Обрабатывает кодовые блоки (```python → <pre><code>).
-        4. Делает `моноширинный текст` с `<code>`, убирая из него `<b>` и `<i>`.
-        5. Удаляет текст между `"""  """`.
-        6. Проверяет незакрытые и неподдерживаемые теги.
+        Форматирует текст для Telegram, оставляя кодовые блоки (```...```) неизменными,
+        а внутри <code> и <pre> удаляя форматирование.
         """
+        # 1. Разделяем текст на части (кодовые блоки и обычный текст)
+        parts = re.split(r'(```.*?```)', text, flags=re.DOTALL)
+        formatted_parts = []
 
-        # 1. Удаляем текст внутри `""" ... """`
-        #text = remove_docstrings(text)
+        for part in parts:
+            if part.startswith("```") and part.endswith("```"):
+                # Это блок кода → преобразуем в <pre><code>
+                clean_code = part.strip('`')  # Убираем ``` с начала и конца
+                formatted_parts.append(f"<pre><code>{clean_code}</code></pre>")
+            else:
+                # Это обычный текст → применяем форматирование
+                part = re.sub(r'^\*\s?', '', part, flags=re.MULTILINE)  # Убираем * в начале строк
+                part = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', part)  # Жирный
+                part = re.sub(r'\*(.*?)\*', r'<i>\1</i>', part)      # Курсив
+                part = re.sub(r'__(.*?)__', r'<u>\1</u>', part)      # Подчеркнутый
+                part = re.sub(r'~(.*?)~', r'<s>\1</s>', part)        # Зачеркнутый
+                part = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', part)  # Инлайн-код
+                formatted_parts.append(part)
 
-        # Удаляем * только в начале строки
-        text = re.sub(r'^\*+', '', text, flags=re.MULTILINE)
+        # 3. Объединяем обратно
+        text = "".join(formatted_parts)
 
-        # 3. Удаляем одиночные `` ` ``, но не `` `код` `` и ```блок кода```
-        #text = re.sub(r'(?<!`)\`(?!`)', '', text)
-
-        # 4. Markdown → HTML
-        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)  # Жирный
-        text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)      # Курсив
-        text = re.sub(r'__(.*?)__', r'<u>\1</u>', text)      # Подчеркнутый
-        text = re.sub(r'~(.*?)~', r'<s>\1</s>', text)        # Зачеркнутый
-
-        # 5. Делаем `инлайн-код` моноширинным
-        text = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', text)
-
+        # 4. Чистим <code> и <pre> от лишнего форматирования
         text = remove_formatting_inside_code(text)
-
-        # 7. Обрабатываем блоки кода (```python → <pre><code>)
-        text = re.sub(r'```(?:python)?(.*?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
-
-        # 8. Проверяем незакрытые теги
-        check_unmatched_tags(text)
 
         return text
 
-    def remove_docstrings(text):
-        """Удаляет текст между `"""  """`, включая сами кавычки."""
-        return re.sub(r'""".*?"""', '', text, flags=re.DOTALL)
 
     def remove_formatting_inside_code(text):
         """
-        Удаляет все HTML-теги внутри <code> и <pre>, оставляя только текст.
+        Удаляет HTML-теги внутри <code> и <pre>, оставляя только текст.
         """
 
-        # 1. Удаляем теги внутри <code>
-        def clean_code(match):
-            """Удаляет HTML-теги внутри <code>"""
-            content = re.sub(r'<.*?>', '', match.group(1))  # Убираем любые HTML-теги
-            return f"<code>{content}</code>"
+        # Удаляем теги внутри <code>
+        text = re.sub(r'<code>(.*?)</code>', lambda m: f"<code>{re.sub(r'<.*?>', '', m.group(1))}</code>", text, flags=re.DOTALL)
 
-        text = re.sub(r'<code>(.*?)</code>', clean_code, text, flags=re.DOTALL)
-
-        # 2. Удаляем теги внутри <pre>
-        def clean_pre(match):
-            """Удаляет HTML-теги внутри <pre>"""
-            content = re.sub(r'<.*?>', '', match.group(1))  # Убираем любые HTML-теги
-            return f"<pre>{content}</pre>"
-
-        text = re.sub(r'<pre>(.*?)</pre>', clean_pre, text, flags=re.DOTALL)
+        # Удаляем теги внутри <pre>
+        text = re.sub(r'<pre><code>(.*?)</code></pre>', lambda m: f"<pre><code>{re.sub(r'<.*?>', '', m.group(1))}</code></pre>", text, flags=re.DOTALL)
 
         return text
-
 
     def remove_formatting_inside(text):
         """
