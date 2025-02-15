@@ -402,13 +402,21 @@ def setup_handlers(bot):
 
         print(f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}")
 
-        # Проверяем, есть ли уже диалог в памяти
+        # Проверяем, есть ли диалог в памяти
         if (chat_id, ai_name) not in dialog_sessions:
+            print(f"[ERROR] dialog_sessions НЕ содержит ({chat_id}, {ai_name}). Создаю новый ключ.")
             dialog_sessions[(chat_id, ai_name)] = []
-            print(f"[LOG] Создан новый ключ в dialog_sessions для ({chat_id}, {ai_name})")
+
+        print(f"[LOG] dialog_sessions перед добавлением сообщения: {dialog_sessions}")
 
         # Добавляем сообщение в локальный кэш
-        dialog_sessions[(chat_id, ai_name)].append({"role": role, "parts": [content]})
+        try:
+            dialog_sessions[(chat_id, ai_name)].append({"role": role, "parts": [content]})
+        except KeyError as e:
+            print(f"[CRITICAL ERROR] KeyError при добавлении сообщения! {e}")
+            print(f"[DEBUG] Содержимое dialog_sessions на момент ошибки: {dialog_sessions}")
+            raise  # Повторно вызываем ошибку, чтобы видеть стек вызова
+
         print(f"[LOG] Обновленный dialog_sessions[{(chat_id, ai_name)}]: {dialog_sessions[(chat_id, ai_name)]}")
 
         # Получаем текущую историю сообщений из БД
@@ -430,7 +438,8 @@ def setup_handlers(bot):
                     try:
                         old_messages = json.loads(result[0])  # Пробуем загрузить JSON
                     except json.JSONDecodeError:
-                        old_messages = []  # Если сломан JSON, начинаем с пустого списка
+                        print("[ERROR] JSONDecodeError! Старый формат данных в БД. Используем пустой список.")
+                        old_messages = []
 
             # Объединяем старые и новые сообщения
             new_messages = old_messages + [{"role": role, "parts": [content]}]
