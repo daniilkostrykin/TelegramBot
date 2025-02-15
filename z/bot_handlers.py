@@ -98,14 +98,15 @@ def setup_handlers(bot):
         bot.send_message(message.chat.id, clean_text)
         bot.send_message(message.chat.id, clean_text, parse_mode='HTML')
 
+
     def format_telegram_text(text):
         """
         Форматирует текст для Telegram:
         1. Удаляет одиночные `*` и `` ` ``, но сохраняет `**жирный**`, `*курсив*`, `` `код` `` и ```блок кода```.
         2. Конвертирует Markdown в HTML (Telegram-совместимый).
         3. Обрабатывает кодовые блоки (```python → <pre><code>).
-        4. Делает `моноширинный текст` с `<code>` (чтобы можно было копировать).
-        5. Удаляет текст между 
+        4. Делает `моноширинный текст` с `<code>`, убирая из него `<b>` и `<i>`.
+        5. Удаляет текст между `""""""`.
         6. Проверяет незакрытые и неподдерживаемые теги.
         """
 
@@ -127,19 +128,21 @@ def setup_handlers(bot):
         # 5. Делаем `инлайн-код` моноширинным
         text = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', text)
 
-        # 6. Обрабатываем блоки кода (```python → <pre><code>)
+        # 6. Убираем `<b>` и `<i>` внутри `<code>`
+        text = re.sub(r'<b>\s*(<code>.*?</code>)\s*</b>', r'\1', text)  # **`код`** → `<code>код</code>`
+        text = re.sub(r'<i>\s*(<code>.*?</code>)\s*</i>', r'\1', text)  # *`код`* → `<code>код</code>`
+
+        # 7. Обрабатываем блоки кода (```python → <pre><code>)
         text = re.sub(r'```(?:python)?(.*?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
 
-        # 7. Проверяем незакрытые теги
+        # 8. Проверяем незакрытые теги
         check_unmatched_tags(text)
 
         return text
 
 
     def remove_docstrings(text):
-        """
-        Удаляет текст между `""" """`, включая сами кавычки.
-        """
+        """Удаляет текст между `"""  """`, включая сами кавычки."""
         return re.sub(r'""".*?"""', '', text, flags=re.DOTALL)
 
 
