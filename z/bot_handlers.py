@@ -43,7 +43,7 @@ def create_tables():
         );
     """)
     print("Database table dialog_sessions created successfully")
-    bot.send_message(ADMIN_ID, "Бот запущен)" )
+    bot.send_message(ADMIN_ID, "✅Бот запущен)" )
     conn.commit()
 
 
