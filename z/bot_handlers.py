@@ -104,48 +104,43 @@ def setup_handlers(bot):
         1. Удаляет одиночные `*` и `` ` ``, но сохраняет `**жирный**`, `*курсив*`, `` `код` `` и ```блок кода```.
         2. Конвертирует Markdown в HTML (Telegram-совместимый).
         3. Обрабатывает кодовые блоки (```python → <pre><code>).
-        4. Удаляет или форматирует комментарии в коде и `# комментарий`).
-        5. Проверяет незакрытые и неподдерживаемые теги.
+        4. Делает `моноширинный текст` с `<code>` (чтобы можно было копировать).
+        5. Удаляет текст между 
+        6. Проверяет незакрытые и неподдерживаемые теги.
         """
 
-        # 1. Удаляем одиночные `*`, но не `**жирный**` и `*курсив*`
+        # 1. Удаляем текст внутри `""" ... """`
+        text = remove_docstrings(text)
+
+        # 2. Удаляем одиночные `*`, но не `**жирный**` и `*курсив*`
         text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
 
-        # 2. Удаляем одиночные `` ` ``, но не `` `код` `` и ```блок кода```
+        # 3. Удаляем одиночные `` ` ``, но не `` `код` `` и ```блок кода```
         text = re.sub(r'(?<!`)\`(?!`)', '', text)
 
-        # 3. Markdown → HTML
+        # 4. Markdown → HTML
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)  # Жирный
         text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)      # Курсив
         text = re.sub(r'__(.*?)__', r'<u>\1</u>', text)      # Подчеркнутый
         text = re.sub(r'~(.*?)~', r'<s>\1</s>', text)        # Зачеркнутый
 
-        # 4. Обрабатываем блоки кода (```python → <pre><code>)
+        # 5. Делаем `инлайн-код` моноширинным
+        text = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', text)
+
+        # 6. Обрабатываем блоки кода (```python → <pre><code>)
         text = re.sub(r'```(?:python)?(.*?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
 
-        # 5. Форматируем комментарии в коде
-        text = format_comments(text)
-
-        # 6. Проверяем незакрытые теги
+        # 7. Проверяем незакрытые теги
         check_unmatched_tags(text)
 
         return text
 
 
-    def format_comments(text):
+    def remove_docstrings(text):
         """
-        Форматирует комментарии:
-        1. Многострочные docstring → `<blockquote> текст </blockquote>`
-        2. Однострочные комментарии (`# текст`) → `<i># текст</i>`
+        Удаляет текст между `""" """`, включая сами кавычки.
         """
-
-        # Docstring: """ текст """ → <blockquote> текст </blockquote>
-        text = re.sub(r'"""\s*(.*?)\s*"""', r'<blockquote>\1</blockquote>', text, flags=re.DOTALL)
-
-        # Однострочные комментарии: # текст → <i># текст</i>
-        text = re.sub(r'(?<=\n)#(.*)', r'<i>#\1</i>', text)
-
-        return text
+        return re.sub(r'""".*?"""', '', text, flags=re.DOTALL)
 
 
     def check_unmatched_tags(text):
@@ -162,6 +157,7 @@ def setup_handlers(bot):
         for tag in counts:
             if tag not in supported_tags:
                 print(f"[WARNING] Неподдерживаемый тег: <{tag}>")
+
 
 
 
