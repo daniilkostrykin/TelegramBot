@@ -89,78 +89,35 @@ def setup_handlers(bot):
             logger.error(f"Error in start command: {e}")
             bot.send_message(message.chat.id, 'Произошла ошибка')
 
+
     def format_telegram_text(text):
-        """Форматирует текст для Telegram, удаляет все `*` и обрабатывает разметку."""
+        """Исправляет разметку для Telegram"""
+        # Убираем звездочки * (если они не нужны)
+        text = text.replace("*", "")
 
-        # Удаляем все звездочки * из текста
-        #text = text.replace("*", "")
+        # Markdown → HTML
+        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)  # Жирный текст
+        text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)      # Курсив
+        text = re.sub(r'__(.*?)__', r'<u>\1</u>', text)      # Подчеркнутый
+        text = re.sub(r'~(.*?)~', r'<s>\1</s>', text)        # Зачеркнутый
 
-        try:
-            # Жирный **текст**
-            text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>',
-                          text, flags=re.DOTALL)
+        # Обработка кода (замена ```python на <pre><code>)
+        text = re.sub(r'```python(.*?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
 
-            # Курсив *текст*
-            text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text, flags=re.DOTALL)
-
-            # Курсив _текст_
-            text = re.sub(r'_(.*?)_', r'<i>\1</i>', text, flags=re.DOTALL)
-
-            # Подчёркнутый __текст__
-            text = re.sub(r'__(.*?)__', r'<u>\1</u>', text, flags=re.DOTALL)
-
-            # Зачёркнутый ~текст~
-            text = re.sub(r'~(.*?)~', r'<s>\1</s>', text, flags=re.DOTALL)
-
-            # Цитаты > текст (каждую строку)
-            text = re.sub(
-                r'^> (.*?)$', r'<blockquote>\1</blockquote>', text, flags=re.MULTILINE)
-
-            # Блоки кода ```код```
-            text = re.sub(
-                r'```([^`<>]+?)```',
-                lambda m: f"<pre>{html.escape(m.group(1))}</pre>",
-                text,
-                flags=re.DOTALL
-            )
-
-            # Инлайн-код `код`
-            text = re.sub(
-                r'`([^`<>]+?)`',
-                lambda m: f"<code>{html.escape(m.group(1))}</code>",
-                text,
-                flags=re.DOTALL
-            )
-
-            # Спойлер ||текст||
-            text = re.sub(r'\|\|(.*?)\|\|',
-                          r'<tg-spoiler>\1</tg-spoiler>', text, flags=re.DOTALL)
-
-            # Убираем незакрытые теги
-            text = fix_unmatched_tags(text)
-
-            return text  # Возвращаем отформатированный текст
-
-        except Exception as e:
-            error_message = f"Ошибка форматирования: {type(e).__name__} - {str(e)}\n"
-            error_message += f"Трассировка:\n{traceback.format_exc()}"
-            logger.error(error_message)
-            print(error_message)
-            return text[:522]  # Ограничиваем текст в случае ошибки
-
-    def fix_unmatched_tags(text):
-        """Исправляет незакрытые HTML-теги, если они появились."""
-        tags = ["b", "i", "u", "s", "pre", "code", "tg-spoiler", "blockquote"]
-        for tag in tags:
-            open_count = text.count(f"<{tag}>")
-            close_count = text.count(f"</{tag}>")
-            if open_count > close_count:
-                # Закрываем лишние открытые теги
-                text += f"</{tag}>" * (open_count - close_count)
-            elif close_count > open_count:
-                # Добавляем недостающие открытые теги
-                text = f"<{tag}>" * (close_count - open_count) + text
         return text
+
+    def check_unmatched_tags(text):
+        """Проверяет, есть ли незакрытые HTML-теги."""
+        from collections import Counter
+        import re
+
+        tags = re.findall(r'</?(\w+)>', text)  # Находим все теги
+        counts = Counter(tags)
+
+        for tag in counts:
+            if counts[f"<{tag}>"] != counts[f"</{tag}>"]:
+                print(f"[ERROR] Незакрытый тег: {tag}")
+
 
     def handle_dialog(message, model_name, test_query=None):
         chat_id = message.chat.id
@@ -216,6 +173,7 @@ def setup_handlers(bot):
                     chunk = response_text[i:i + max_length]
                     generated_text += chunk
                     formatted_text = format_telegram_text(generated_text)
+                    check_unmatched_tags(formatted_text)
 
                     try:
                         bot.edit_message_text(formatted_text, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
@@ -367,17 +325,17 @@ def setup_handlers(bot):
             print(f"[ERROR] dialog_sessions НЕ содержит ({chat_id}, {ai_name}). Создаю новый ключ.")
             dialog_sessions[(chat_id, ai_name)] = []
 
-        print(f"[LOG] dialog_sessions перед добавлением сообщения: {dialog_sessions}")
+        #print(f"[LOG] dialog_sessions перед добавлением сообщения: {dialog_sessions}")
 
         # Добавляем сообщение в локальный кэш
         try:
             dialog_sessions[(chat_id, ai_name)].append({"role": role, "parts": [content]})
         except KeyError as e:
             print(f"[CRITICAL ERROR] KeyError при добавлении сообщения! {e}")
-            print(f"[DEBUG] Содержимое dialog_sessions на момент ошибки: {dialog_sessions}")
+            #print(f"[DEBUG] Содержимое dialog_sessions на момент ошибки: {dialog_sessions}")
             raise  # Повторно вызываем ошибку, чтобы видеть стек вызова
 
-        print(f"[LOG] Обновленный dialog_sessions[{(chat_id, ai_name)}]: {dialog_sessions[(chat_id, ai_name)]}")
+        #print(f"[LOG] Обновленный dialog_sessions[{(chat_id, ai_name)}]: {dialog_sessions[(chat_id, ai_name)]}")
 
         # Получаем текущую историю сообщений из БД
         try:
@@ -387,7 +345,7 @@ def setup_handlers(bot):
             )
             result = cursor.fetchone()
 
-            print(f"[LOG] Полученный результат из БД: {result}")
+            #print(f"[LOG] Полученный результат из БД: {result}")
 
             # Загружаем данные из БД только если они есть
             old_messages = []
@@ -403,7 +361,7 @@ def setup_handlers(bot):
 
             # Объединяем старые и новые сообщения
             new_messages = old_messages + [{"role": role, "parts": [content]}]
-            print(f"[LOG] Сформирован новый список сообщений: {new_messages}")
+            #print(f"[LOG] Сформирован новый список сообщений: {new_messages}")
 
             # Сохраняем обновленную историю в БД
             cursor.execute("""
