@@ -90,11 +90,21 @@ def setup_handlers(bot):
             bot.send_message(message.chat.id, 'Произошла ошибка')
 
 
+    def remove_single_asterisks(text):
+        """Удаляет только одиночные символы `*`, но сохраняет `**жирный**` и `*курсив*`."""
+        # Удаляем одиночные `*`, но не трогаем `**` и `*курсив*`
+        return re.sub(r'(?<!\*)\*(?!\*)', '', text)
+    @bot.message_handler(commands=['test'])
+    def test(message):
+        text = "* Это *не жирный* и не *курсив*, но **это жирный**, а *это курсив*."
+        clean_text = remove_single_asterisks(text)
+        bot.send_message(message.chat.id, clean_text)
+
     def format_telegram_text(text):
         """Исправляет разметку для Telegram"""
         # Убираем звездочки * (если они не нужны)
-        text = text.replace("*", "")
-
+        text = remove_single_asterisks(text)
+        
         # Markdown → HTML
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)  # Жирный текст
         text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)      # Курсив
@@ -174,6 +184,8 @@ def setup_handlers(bot):
                     generated_text += chunk
                     formatted_text = format_telegram_text(generated_text)
                     check_unmatched_tags(formatted_text)
+                    print(f"[DEBUG] Отформатированный ответ: {formatted_text}")
+
 
                     try:
                         bot.edit_message_text(formatted_text, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
