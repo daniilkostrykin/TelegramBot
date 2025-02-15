@@ -168,6 +168,7 @@ def setup_handlers(bot):
             if message.text == '⏹️ Завершить диалог':
                 bot.send_message(chat_id, "Диалог завершен.", reply_markup=get_ai_selection_keyboard())
                 if (chat_id, model_name) in dialog_sessions:
+                    print(f"[WARNING] Удаляю dialog_sessions[{(chat_id, model_name)}]")
                     del dialog_sessions[(chat_id, model_name)]
                 if chat_id in user_states:
                     del user_states[chat_id]
@@ -178,6 +179,7 @@ def setup_handlers(bot):
                 bot.send_message(chat_id, "Возврат в меню выбора Gemini модели.", reply_markup=get_gemini_model_keyboard())
                 save_user_state(chat_id, 'gemini_model_selection')
                 if (chat_id, model_name) in dialog_sessions:
+                    print(f"[WARNING] Удаляю dialog_sessions[{(chat_id, model_name)}]")
                     del dialog_sessions[(chat_id, model_name)]
                 return
 
@@ -195,8 +197,9 @@ def setup_handlers(bot):
             try:
                 model = genai.GenerativeModel(model_name)
 
-                # ✅ Заменили этот кусок кода
-                messages = dialog_sessions.get((chat_id, model_name), [])  # Теперь правильный доступ к истории диалога
+                # ✅ Используем правильный ключ
+                messages = dialog_sessions.get((chat_id, model_name), [])
+                print(f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
 
                 response = model.generate_content(messages)
                 response_text = response.text
@@ -219,13 +222,11 @@ def setup_handlers(bot):
                         time.sleep(0.5)
                     except telebot.apihelper.ApiTelegramException as e:
                         logger.error(f"Ошибка Telegram API при отправке сообщения: {type(e).__name__} - {str(e)}\n")
-                        print(f"Ошибка Telegram API: {e}")
                         plain_text = re.sub(r'<[^>]+>', '', formatted_text)
                         bot.send_message(chat_id, plain_text)
 
                     except Exception as e:
-                        logger.error(f"Общая ошибка при отправке сообщения: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}")
-                        print(f"Ошибка отправки сообщения: {e}")
+                        logger.error(f"Ошибка отправки сообщения: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}")
                         bot.send_message(chat_id, f"Произошла ошибка: {str(e)}. Попробуйте снова.")
                         break
 
@@ -234,12 +235,10 @@ def setup_handlers(bot):
 
             except Exception as e:
                 logger.error(f"Ошибка генерации контента: {type(e).__name__} - {str(e)}")
-                print(f"Ошибка генерации контента: {e}")
                 bot.send_message(chat_id, f"Произошла ошибка генерации контента: {str(e)}")
 
         except Exception as e:
             logger.error(f"Ошибка в диалоге Gemini: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}")
-            print(f"Ошибка в диалоге Gemini: {e}")
             bot.send_message(message.chat.id, f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте позже.")
 
 
