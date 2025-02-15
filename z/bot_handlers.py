@@ -304,7 +304,6 @@ def setup_handlers(bot):
             # Добавляем ответ в историю
             g4f_dialog_sessions[chat_id].append(
                 {"role": "assistant", "content": response_text})
-            bot.delete_message(chat_id, sent_message.message_id)
 
             bot.register_next_step_handler(message, handle_g4f_dialog)
 
