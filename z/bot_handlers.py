@@ -165,23 +165,20 @@ def setup_handlers(bot):
     def handle_dialog(message, model_name, test_query=None):
         chat_id = message.chat.id
         try:
-
             if message.text == '⏹️ Завершить диалог':
-                bot.send_message(chat_id, "Диалог завершен.",
-                                 reply_markup=get_ai_selection_keyboard())
-                if chat_id in dialog_sessions:
-                    del dialog_sessions[chat_id]
+                bot.send_message(chat_id, "Диалог завершен.", reply_markup=get_ai_selection_keyboard())
+                if (chat_id, model_name) in dialog_sessions:
+                    del dialog_sessions[(chat_id, model_name)]
                 if chat_id in user_states:
                     del user_states[chat_id]
                 save_user_state(chat_id, 'ai_selection')
                 return
 
             elif message.text == '⬅️ Назад':
-                bot.send_message(chat_id, "Возврат в меню выбора Gemini модели.",
-                                 reply_markup=get_gemini_model_keyboard())
+                bot.send_message(chat_id, "Возврат в меню выбора Gemini модели.", reply_markup=get_gemini_model_keyboard())
                 save_user_state(chat_id, 'gemini_model_selection')
-                if chat_id in dialog_sessions:
-                    del dialog_sessions[chat_id]
+                if (chat_id, model_name) in dialog_sessions:
+                    del dialog_sessions[(chat_id, model_name)]
                 return
 
             query = test_query if test_query else message.text
@@ -189,33 +186,28 @@ def setup_handlers(bot):
 
             # Кнопка "Stop"
             markup = types.InlineKeyboardMarkup()
-            stop_button = types.InlineKeyboardButton(
-                "⏹️ Stop", callback_data=f"stop_{chat_id}")
+            stop_button = types.InlineKeyboardButton("⏹️ Stop", callback_data=f"stop_{chat_id}")
             markup.add(stop_button)
 
-            sent_message = bot.send_message(
-                chat_id, "Генерация ответа...", reply_markup=markup)
+            sent_message = bot.send_message(chat_id, "Генерация ответа...", reply_markup=markup)
             active_generations[chat_id] = True
 
             try:
                 model = genai.GenerativeModel(model_name)
-                messages = []
-                for item in dialog_sessions[chat_id]:
-                    messages.append(item)
-                response = model.generate_content(messages)
 
+                # ✅ Заменили этот кусок кода
+                messages = dialog_sessions.get((chat_id, model_name), [])  # Теперь правильный доступ к истории диалога
+
+                response = model.generate_content(messages)
                 response_text = response.text
-                save_dialog_message(chat_id, model_name,
-                                    "model", response_text)
+                save_dialog_message(chat_id, model_name, "model", response_text)
 
                 max_length = 4000
                 generated_text = ""
 
                 for i in range(0, len(response_text), max_length):
-                    # Проверяем, остановлена ли генерация
                     if not active_generations.get(chat_id, False):
-                        bot.edit_message_text(
-                            "⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
+                        bot.edit_message_text("⏹️ Генерация остановлена.", chat_id, sent_message.message_id)
                         return
 
                     chunk = response_text[i:i + max_length]
@@ -223,64 +215,33 @@ def setup_handlers(bot):
                     formatted_text = format_telegram_text(generated_text)
 
                     try:
-                        bot.edit_message_text(
-                            formatted_text, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
+                        bot.edit_message_text(formatted_text, chat_id, sent_message.message_id, parse_mode='HTML', reply_markup=markup)
                         time.sleep(0.5)
                     except telebot.apihelper.ApiTelegramException as e:
-                        error_message = f"Ошибка Telegram API при отправке сообщения: {type(e).__name__} - {str(e)}\n"
-                        logger.error(error_message)
-                        print(error_message)
-
-                        # Попробуем убрать форматирование и повторить отправку
-                        # Удаляем все HTML-теги
+                        logger.error(f"Ошибка Telegram API при отправке сообщения: {type(e).__name__} - {str(e)}\n")
+                        print(f"Ошибка Telegram API: {e}")
                         plain_text = re.sub(r'<[^>]+>', '', formatted_text)
-                        plain_text = plain_text[:4096]  # Telegram ограничение по длине сообщения
-
-                        try:
-                            # Отправляем без форматирования
-                            bot.send_message(chat_id, plain_text)
-                        except telebot.apihelper.ApiTelegramException as e2:
-                            logger.error(
-                                f"Повторная ошибка при отправке без форматирования: {e2}")
-                            bot.send_message(
-                                chat_id, "Произошла ошибка при отправке сообщения. Пожалуйста, попробуйте снова.")
-
-                        # Перезапускаем обработчик диалога
-                        bot.register_next_step_handler(
-                            message, handle_dialog, model_name=model_name)
+                        bot.send_message(chat_id, plain_text)
 
                     except Exception as e:
-                        error_message = f"Общая ошибка при отправке сообщения: {type(e).__name__} - {str(e)}\n"
-                        error_message += f"Трассировка:\n{traceback.format_exc()}"
-                        logger.error(error_message)
-                        print(error_message)  # Выводим в консоль
-                        bot.send_message(
-                            chat_id, f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте еще раз позже.")
+                        logger.error(f"Общая ошибка при отправке сообщения: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}")
+                        print(f"Ошибка отправки сообщения: {e}")
+                        bot.send_message(chat_id, f"Произошла ошибка: {str(e)}. Попробуйте снова.")
                         break
 
-                        bot.edit_message_reply_markup(
-                            chat_id, sent_message.message_id, reply_markup=None)
+                    bot.edit_message_reply_markup(chat_id, sent_message.message_id, reply_markup=None)
+                    bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
 
-                        bot.register_next_step_handler(
-                            message, handle_dialog, model_name=model_name)
             except Exception as e:
-                error_message = f"Ошибка генерации контента: {type(e).__name__} - {str(e)}"
-                logger.error(error_message)
-                print(error_message)
-                bot.send_message(
-                    chat_id, f"Произошла ошибка генерации контента: {str(e)}")
-                return
-        except Exception as e:
-            error_message = f"Ошибка в диалоге Gemini (внешний try): {type(e).__name__} - {str(e)}\n"
-            error_message += f"Трассировка:\n{traceback.format_exc()}"
-            logger.error(error_message)
-            print(error_message)  # Выводим в консоль
+                logger.error(f"Ошибка генерации контента: {type(e).__name__} - {str(e)}")
+                print(f"Ошибка генерации контента: {e}")
+                bot.send_message(chat_id, f"Произошла ошибка генерации контента: {str(e)}")
 
-            # Сообщаем пользователю об ошибке
-            bot.send_message(
-                message.chat.id, f"Произошла общая ошибка: {str(e)}. Пожалуйста, попробуйте позже.")
-            bot.register_next_step_handler(
-                message, handle_dialog, model_name=model_name)
+        except Exception as e:
+            logger.error(f"Ошибка в диалоге Gemini: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}")
+            print(f"Ошибка в диалоге Gemini: {e}")
+            bot.send_message(message.chat.id, f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте позже.")
+
 
     def handle_g4f_dialog(message):
         chat_id = message.chat.id
