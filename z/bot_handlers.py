@@ -296,14 +296,15 @@ def setup_handlers(bot):
                 # 🔥 Проверяем, изменился ли текст перед обновлением
                 if new_formatted_chunk != formatted_chunk:
                     formatted_chunk = new_formatted_chunk
-                    bot.edit_message_text(
-                        formatted_chunk, chat_id, sent_message.message_id, parse_mode='HTML')
+                    bot.send_message(
+                        chat_id, formatted_chunk, parse_mode='HTML')
 
                 time.sleep(0.5)  # Избегаем флуда
 
             # Добавляем ответ в историю
             g4f_dialog_sessions[chat_id].append(
                 {"role": "assistant", "content": response_text})
+            bot.delete_message(chat_id, sent_message.message_id)
 
             bot.register_next_step_handler(message, handle_g4f_dialog)
 
