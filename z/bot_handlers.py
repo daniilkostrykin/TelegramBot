@@ -112,13 +112,13 @@ def setup_handlers(bot):
         """
 
         # 1. Удаляем текст внутри `""" ... """`
-        text = remove_docstrings(text)
+        #text = remove_docstrings(text)
 
         # 2. Удаляем одиночные `*`, но не `**жирный**` и `*курсив*`
         text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
 
         # 3. Удаляем одиночные `` ` ``, но не `` `код` `` и ```блок кода```
-        text = re.sub(r'(?<!`)\`(?!`)', '', text)
+        #text = re.sub(r'(?<!`)\`(?!`)', '', text)
 
         # 4. Markdown → HTML
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)  # Жирный
@@ -130,7 +130,7 @@ def setup_handlers(bot):
         text = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', text)
 
         # 6. Убираем `<b>` и `<i>` внутри `<code>`
-        text = remove_formatting_inside_code(text)
+        #text = remove_formatting_inside_code(text)
 
         # 7. Обрабатываем блоки кода (```python → <pre><code>)
         text = re.sub(r'```(?:python)?(.*?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
