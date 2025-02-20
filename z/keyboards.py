@@ -5,6 +5,7 @@ import telebot
 from z.config import GEMINI_API_KEY, BOT_TOKEN
 bot = telebot.TeleBot(BOT_TOKEN)
 
+
 # --- Клавиатуры (keyboard.py) ---
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
