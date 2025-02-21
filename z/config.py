@@ -7,6 +7,7 @@ DEEPSEEK_API_KEY = "sk-proj-H-pUqBuiY_eo3QKeWOEVAKuCxXEl82eZiXDJrGsMp4HHQZuKELWl
 GEMINI_API_KEY = "AIzaSyA7FbfWRHabE5gGCVbx9PqHjl0qo4kAatY"
 DEEPSEEK_SEARCH_URL = "https://api.deepseek.com/v1/search"
 DEEPSEEK_INTERNET_SEARCH_URL = "https://api.deepseek.com/v1/internet_search"
+DEEPSEEK_TOKEN = "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"
 
 POPULAR_SITES = {
     "вк": "https://vk.com",
