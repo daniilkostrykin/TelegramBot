@@ -228,7 +228,7 @@ def setup_handlers(bot):
                 print(f"[DEBUG] Отформатированный ответ: {formatted_text}")
 
                 # ✅ Используем send_long_message для обхода лимита 4000 символов
-                send_long_message(chat_id, formatted_text, bot, parse_mode="HTML")
+                send_long_message(chat_id, response_text, bot, parse_mode="Markdown")
                 bot.delete_message(chat_id, sent_message.message_id)
                 bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
 
