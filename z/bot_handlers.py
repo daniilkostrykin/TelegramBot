@@ -29,8 +29,8 @@ from collections import Counter
 # Получаем URL базы данных из переменной окружения
 DATABASE_URL = os.environ.get("DB_URL")
 if not DATABASE_URL:
-    print("Ошибка: Не найдена переменная окружения DB_URL.  Убедитесь, что она установлена.")
-    exit()  # Или используйте другое действие для обработки этой ошибки
+    print("Ошибка: Не найдена переменная окружения DB_URL из системы.  Убедитесь, что она установлена.")
+    DATABASE_URL = "postgresql://postgres:UxAgpKnoEDeQGLsAODlFNlVOirCaoCIa@gondola.proxy.rlwy.net:54556/railway"
 
 
 def create_tables():
@@ -43,7 +43,7 @@ def create_tables():
         );
     """)
     print("Database table dialog_sessions created successfully")
-    bot.send_message(ADMIN_ID, "✅Бот запущен)" )
+    bot.send_message(ADMIN_ID, "✅Бот запущен)")
     conn.commit()
 
 
@@ -98,8 +98,6 @@ def setup_handlers(bot):
         bot.send_message(message.chat.id, clean_text)
         bot.send_message(message.chat.id, clean_text, parse_mode='HTML')
 
-
-
     def format_telegram_text(text):
         """
         Форматирует текст для Telegram, оставляя кодовые блоки (```...```) неизменными,
@@ -116,12 +114,16 @@ def setup_handlers(bot):
                 formatted_parts.append(f"<pre><code>{clean_code}</code></pre>")
             else:
                 # Это обычный текст → применяем форматирование
-                part = re.sub(r'^\*\s?', '', part, flags=re.MULTILINE)  # Убираем * в начале строк
+                # Убираем * в начале строк
+                part = re.sub(r'^\*\s?', '', part, flags=re.MULTILINE)
                 part = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', part)  # Жирный
                 part = re.sub(r'\*(.*?)\*', r'<i>\1</i>', part)      # Курсив
-                part = re.sub(r'__(.*?)__', r'<u>\1</u>', part)      # Подчеркнутый
-                part = re.sub(r'~(.*?)~', r'<s>\1</s>', part)        # Зачеркнутый
-                part = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', part)  # Инлайн-код
+                part = re.sub(r'__(.*?)__', r'<u>\1</u>',
+                              part)      # Подчеркнутый
+                part = re.sub(r'~(.*?)~', r'<s>\1</s>',
+                              part)        # Зачеркнутый
+                # Инлайн-код
+                part = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', part)
                 formatted_parts.append(part)
 
         # 3. Объединяем обратно
@@ -132,17 +134,18 @@ def setup_handlers(bot):
 
         return text
 
-
     def remove_formatting_inside_code(text):
         """
         Удаляет HTML-теги внутри <code> и <pre>, оставляя только текст.
         """
 
         # Удаляем теги внутри <code>
-        text = re.sub(r'<code>(.*?)</code>', lambda m: f"<code>{re.sub(r'<.*?>', '', m.group(1))}</code>", text, flags=re.DOTALL)
+        text = re.sub(r'<code>(.*?)</code>',
+                      lambda m: f"<code>{re.sub(r'<.*?>', '', m.group(1))}</code>", text, flags=re.DOTALL)
 
         # Удаляем теги внутри <pre>
-        text = re.sub(r'<pre><code>(.*?)</code></pre>', lambda m: f"<pre><code>{re.sub(r'<.*?>', '', m.group(1))}</code></pre>", text, flags=re.DOTALL)
+        text = re.sub(r'<pre><code>(.*?)</code></pre>',
+                      lambda m: f"<pre><code>{re.sub(r'<.*?>', '', m.group(1))}</code></pre>", text, flags=re.DOTALL)
 
         return text
 
@@ -152,11 +155,10 @@ def setup_handlers(bot):
         """
 
         # **`код`** → `<b><code>код</code></b>` → `<code>код</code>`
-        text = re.sub(r'<b>\s*(<code>.*?</code>)\s*</b>', r'\1', text)  
-        text = re.sub(r'<i>\s*(<code>.*?</code>)\s*</i>', r'\1', text)  
+        text = re.sub(r'<b>\s*(<code>.*?</code>)\s*</b>', r'\1', text)
+        text = re.sub(r'<i>\s*(<code>.*?</code>)\s*</i>', r'\1', text)
 
         return text
-
 
     def check_unmatched_tags(text):
         """Ищет незакрытые или неподдерживаемые HTML-теги."""
@@ -168,7 +170,8 @@ def setup_handlers(bot):
                 print(f"[ERROR] Незакрытый или лишний тег: <{tag}>")
 
         # Проверяем, есть ли неподдерживаемые теги
-        supported_tags = {"b", "i", "u", "s", "a", "code", "pre", "blockquote", "tg-spoiler"}
+        supported_tags = {"b", "i", "u", "s", "a",
+                          "code", "pre", "blockquote", "tg-spoiler"}
         for tag in counts:
             if tag not in supported_tags:
                 print(f"[WARNING] Неподдерживаемый тег: <{tag}>")
@@ -183,16 +186,18 @@ def setup_handlers(bot):
         for i in range(0, len(text), max_length):
             chunk = text[i:i + max_length]
             bot.send_message(chat_id, chunk, parse_mode=parse_mode)
-            time.sleep(0.5)  # Делаем небольшую паузу, чтобы не перегружать API Telegram
-
+            # Делаем небольшую паузу, чтобы не перегружать API Telegram
+            time.sleep(0.5)
 
     def handle_dialog(message, model_name, test_query=None):
         chat_id = message.chat.id
         try:
             if message.text == '⏹️ Завершить диалог':
-                bot.send_message(chat_id, "Диалог завершен.", reply_markup=get_ai_selection_keyboard())
+                bot.send_message(chat_id, "Диалог завершен.",
+                                 reply_markup=get_ai_selection_keyboard())
                 if (chat_id, model_name) in dialog_sessions:
-                    print(f"[WARNING] Удаляю dialog_sessions[{(chat_id, model_name)}]")
+                    print(
+                        f"[WARNING] Удаляю dialog_sessions[{(chat_id, model_name)}]")
                     del dialog_sessions[(chat_id, model_name)]
                 if chat_id in user_states:
                     del user_states[chat_id]
@@ -200,10 +205,12 @@ def setup_handlers(bot):
                 return
 
             elif message.text == '⬅️ Назад':
-                bot.send_message(chat_id, "Возврат в меню выбора Gemini модели.", reply_markup=get_gemini_model_keyboard())
+                bot.send_message(chat_id, "Возврат в меню выбора Gemini модели.",
+                                 reply_markup=get_gemini_model_keyboard())
                 save_user_state(chat_id, 'gemini_model_selection')
                 if (chat_id, model_name) in dialog_sessions:
-                    print(f"[WARNING] Удаляю dialog_sessions[{(chat_id, model_name)}]")
+                    print(
+                        f"[WARNING] Удаляю dialog_sessions[{(chat_id, model_name)}]")
                     del dialog_sessions[(chat_id, model_name)]
                 return
 
@@ -218,37 +225,74 @@ def setup_handlers(bot):
 
                 # ✅ Используем правильный ключ
                 messages = dialog_sessions.get((chat_id, model_name), [])
-                print(f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
+                print(
+                    f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
 
                 response = model.generate_content(messages)
                 response_text = response.text
-                save_dialog_message(chat_id, model_name, "model", response_text)
+                save_dialog_message(chat_id, model_name,
+                                    "model", response_text)
 
-                formatted_text = format_telegram_text(response_text)
-                print(f"[DEBUG] Отформатированный ответ: {formatted_text}")
+                def safe_send_message(text):
+                    MAX_LENGTH = 4000
+                    try:
+                        # Удаляем некорректные символы форматирования
+                        text = text.replace('```', '`')  # Заменяем тройные кавычки на одинарные
+                        text = re.sub(r'[*_`][*_`]*$', '', text)  # Удаляем незакрытые маркеры в конце
+                        
+                        # Разбиваем на части если текст длинный
+                        for i in range(0, len(text), MAX_LENGTH):
+                            chunk = text[i:i + MAX_LENGTH]
+                            # Проверяем и закрываем открытые теги форматирования
+                            chunk = close_formatting_tags(chunk)
+                            bot.send_message(chat_id, chunk, parse_mode='Markdown')
+                            time.sleep(0.5)  # Небольшая задержка между сообщениями
+                    except Exception as e:
+                        # Если всё ещё есть ошибка, отправляем без форматирования
+                        print(f"Ошибка форматирования: {e}")
+                        bot.send_message(chat_id, text, parse_mode=None)
 
-                # ✅ Используем send_long_message для обхода лимита 4000 символов
-                send_long_message(chat_id, response_text, bot, parse_mode="Markdown")
+                def close_formatting_tags(text):
+                    # Подсчёт открытых тегов
+                    open_bold = text.count('*') - text.count('**')
+                    open_italic = text.count('_')
+                    open_code = text.count('`')
+                    
+                    # Закрываем открытые теги
+                    if open_bold % 2:
+                        text += '*'
+                    if open_italic % 2:
+                        text += '_'
+                    if open_code % 2:
+                        text += '`'
+                    return text
+
+                safe_send_message(response_text)
                 bot.delete_message(chat_id, sent_message.message_id)
                 bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
 
             except Exception as e:
-                logger.error(f"Ошибка генерации контента: {type(e).__name__} - {str(e)}")
-                bot.send_message(chat_id, f"Произошла ошибка генерации контента: {str(e)}/nПожалуйста, попробуйте снова.")
-                bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
+                logger.error(
+                    f"Ошибка генерации контента: {type(e).__name__} - {str(e)}")
+                bot.send_message(
+                    chat_id, f"Произошла ошибка генерации контента: {str(e)}/nПожалуйста, попробуйте снова.")
+                bot.register_next_step_handler(
+                    message, handle_dialog, model_name=model_name)
 
         except Exception as e:
-            logger.error(f"Ошибка в диалоге Gemini: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}")
-            bot.send_message(message.chat.id, f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте снова.")
-            bot.register_next_step_handler(message, handle_dialog, model_name=model_name)
-
+            logger.error(
+                f"Ошибка в диалоге Gemini: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}")
+            bot.send_message(
+                message.chat.id, f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте снова.")
+            bot.register_next_step_handler(
+                message, handle_dialog, model_name=model_name)
 
     def handle_g4f_dialog(message):
         chat_id = message.chat.id
 
         if message.text == '⏹️ Завершить диалог':
             bot.send_message(chat_id, "Диалог завершен.",
-                            reply_markup=get_main_keyboard())
+                             reply_markup=get_main_keyboard())
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
             if chat_id in user_states:
@@ -258,7 +302,7 @@ def setup_handlers(bot):
 
         elif message.text == '⬅️ Назад':
             bot.send_message(chat_id, "Возврат в меню выбора G4F модели.",
-                            reply_markup=get_g4f_model_keyboard())
+                             reply_markup=get_g4f_model_keyboard())
             save_user_state(chat_id, 'g4f_model_selection')
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
@@ -289,7 +333,6 @@ def setup_handlers(bot):
             for i in range(0, len(response_text), max_length):
                 # Если нажали "Stop"
 
-
                 chunk = response_text[i:i + max_length]
                 generated_text += chunk
                 new_formatted_chunk = format_telegram_text(generated_text)
@@ -315,13 +358,16 @@ def setup_handlers(bot):
             print(error_message)
 
             # ✅ Убедимся, что переменная существует перед использованием
-            plain_text = re.sub(r'<[^>]+>', '', formatted_chunk) if formatted_chunk else response_text
+            plain_text = re.sub(
+                r'<[^>]+>', '', formatted_chunk) if formatted_chunk else response_text
 
             try:
                 bot.send_message(chat_id, plain_text)
             except telebot.apihelper.ApiTelegramException as e2:
-                logger.error(f"Повторная ошибка при отправке без форматирования: {e2}")
-                bot.send_message(chat_id, "Ошибка при отправке сообщения. Попробуйте позже.")
+                logger.error(
+                    f"Повторная ошибка при отправке без форматирования: {e2}")
+                bot.send_message(
+                    chat_id, "Ошибка при отправке сообщения. Попробуйте позже.")
 
             bot.register_next_step_handler(message, handle_g4f_dialog)
 
@@ -335,10 +381,12 @@ def setup_handlers(bot):
         Если текст не изменился, не вызывает `edit_message_text`, чтобы избежать ошибки 400.
         """
         try:
-            bot.edit_message_text(new_text, chat_id, message_id, parse_mode="HTML", reply_markup=reply_markup)
+            bot.edit_message_text(
+                new_text, chat_id, message_id, parse_mode="HTML", reply_markup=reply_markup)
         except telebot.apihelper.ApiTelegramException as e:
             if "message is not modified" in str(e):
-                print(f"[INFO] Сообщение уже имеет нужный текст, редактирование пропущено.")
+                print(
+                    f"[INFO] Сообщение уже имеет нужный текст, редактирование пропущено.")
             else:
                 raise  # Если другая ошибка, выбрасываем её
 
@@ -359,50 +407,56 @@ def setup_handlers(bot):
     def save_dialog_message(chat_id, ai_name, role, content):
         """Сохраняет сообщение в диалог пользователя (в БД и в память)."""
 
-        print(f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}")
+        print(
+            f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}")
 
         # Проверяем, есть ли диалог в памяти
         if (chat_id, ai_name) not in dialog_sessions:
-            print(f"[ERROR] dialog_sessions НЕ содержит ({chat_id}, {ai_name}). Создаю новый ключ.")
+            print(
+                f"[ERROR] dialog_sessions НЕ содержит ({chat_id}, {ai_name}). Создаю новый ключ.")
             dialog_sessions[(chat_id, ai_name)] = []
 
-        #print(f"[LOG] dialog_sessions перед добавлением сообщения: {dialog_sessions}")
+        # print(f"[LOG] dialog_sessions перед добавлением сообщения: {dialog_sessions}")
 
         # Добавляем сообщение в локальный кэш
         try:
-            dialog_sessions[(chat_id, ai_name)].append({"role": role, "parts": [content]})
+            dialog_sessions[(chat_id, ai_name)].append(
+                {"role": role, "parts": [content]})
         except KeyError as e:
             print(f"[CRITICAL ERROR] KeyError при добавлении сообщения! {e}")
-            #print(f"[DEBUG] Содержимое dialog_sessions на момент ошибки: {dialog_sessions}")
+            # print(f"[DEBUG] Содержимое dialog_sessions на момент ошибки: {dialog_sessions}")
             raise  # Повторно вызываем ошибку, чтобы видеть стек вызова
 
-        #print(f"[LOG] Обновленный dialog_sessions[{(chat_id, ai_name)}]: {dialog_sessions[(chat_id, ai_name)]}")
+        # print(f"[LOG] Обновленный dialog_sessions[{(chat_id, ai_name)}]: {dialog_sessions[(chat_id, ai_name)]}")
 
         # Получаем текущую историю сообщений из БД
         try:
             cursor.execute(
-                "SELECT messages FROM dialog_sessions WHERE chat_id = %s AND ai_name = %s", 
+                "SELECT messages FROM dialog_sessions WHERE chat_id = %s AND ai_name = %s",
                 (chat_id, ai_name)
             )
             result = cursor.fetchone()
 
-            #print(f"[LOG] Полученный результат из БД: {result}")
+            # print(f"[LOG] Полученный результат из БД: {result}")
 
             # Загружаем данные из БД только если они есть
             old_messages = []
             if result and result[0]:
                 if isinstance(result[0], list):
-                    old_messages = result[0]  # Уже список, можно использовать напрямую
+                    # Уже список, можно использовать напрямую
+                    old_messages = result[0]
                 elif isinstance(result[0], str):
                     try:
-                        old_messages = json.loads(result[0])  # Пробуем загрузить JSON
+                        # Пробуем загрузить JSON
+                        old_messages = json.loads(result[0])
                     except json.JSONDecodeError:
-                        print("[ERROR] JSONDecodeError! Старый формат данных в БД. Используем пустой список.")
+                        print(
+                            "[ERROR] JSONDecodeError! Старый формат данных в БД. Используем пустой список.")
                         old_messages = []
 
             # Объединяем старые и новые сообщения
             new_messages = old_messages + [{"role": role, "parts": [content]}]
-            #print(f"[LOG] Сформирован новый список сообщений: {new_messages}")
+            # print(f"[LOG] Сформирован новый список сообщений: {new_messages}")
 
             # Сохраняем обновленную историю в БД
             cursor.execute("""
@@ -418,7 +472,6 @@ def setup_handlers(bot):
         except Exception as e:
             print(f"[ERROR] Ошибка при сохранении в БД: {e}")
             print(traceback.format_exc())  # Выводим полный стек ошибки
-
 
     def get_dialog_history(chat_id, ai_name):
         """Получает всю историю диалога из БД."""
