@@ -3,8 +3,6 @@ import re
 import threading
 import time
 import requests
-import telebot
-from telebot import types
 import logging
 import os
 from z.config import ADMIN_ID, POPULAR_SITES
@@ -12,18 +10,20 @@ import google.generativeai as genai
 from z.config import GEMINI_API_KEY, BOT_TOKEN
 from g4f.client import Client
 from deep_translator import GoogleTranslator
-from telebot.types import Message
+from aiogram.types import Message
 from z.keyboards import *
 import psycopg2
 import json
 import traceback
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.dispatcher import Dispatcher
+from aiogram import Dispatcher, Bot, types
 from aiogram.utils import markdown
-from aiogram.dispatcher import FSMContext
+from aiogram.fsm.context import FSMContext
 import asyncio
-from aiogram.dispatcher import FSMContext
-import asyncio
+from aiogram import F
+from aiogram.filters import Command, CommandStart, StateFilter
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.filters import BaseFilter
 
 
 class DialogStates(StatesGroup):
@@ -40,7 +40,9 @@ if not DATABASE_URL:
     print("Ошибка: Не найдена переменная окружения DB_URL из системы.  Убедитесь, что она установлена.")
     DATABASE_URL = "postgresql://postgres:UxAgpKnoEDeQGLsAODlFNlVOirCaoCIa@gondola.proxy.rlwy.net:54556/railway"
 
-dp = Dispatcher()
+# Инициализируем диспетчер с хранилищем состояний
+dp = Dispatcher(storage=MemoryStorage())
+
 
 def create_tables():
     cursor.execute("""
@@ -51,17 +53,105 @@ def create_tables():
             PRIMARY KEY (chat_id, ai_name)
         );
     """)
-    print("Database table dialog_sessions created successfully")
-    bot.send_message(ADMIN_ID, "✅Бот запущен)")
+    # Создаем таблицу для хранения всех пользователей
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            chat_id BIGINT PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+    print("Database tables created successfully")
     conn.commit()
 
+# Добавляем отдельную функцию для отправки уведомления администратору
 
+
+async def send_admin_notification(bot):
+    try:
+        await bot.send_message(ADMIN_ID, "✅Бот запущен)")
+        print("Уведомление администратору отправлено")
+    except Exception as e:
+        print(f"Ошибка при отправке уведомления администратору: {e}")
+
+# Добавляем функцию для получения всех пользователей из базы данных
+
+
+async def get_all_users():
+    try:
+        # Сначала пробуем получить пользователей из таблицы users
+        cursor.execute("SELECT chat_id FROM users")
+        users = cursor.fetchall()
+
+        if not users:
+            # Если таблица users пуста, получаем пользователей из dialog_sessions
+            cursor.execute("SELECT DISTINCT chat_id FROM dialog_sessions")
+            users = cursor.fetchall()
+
+        return [user[0] for user in users]
+    except Exception as e:
+        print(f"Ошибка при получении списка пользователей: {e}")
+        return []
+
+# Добавляем функцию для сохранения пользователя в базу данных
+
+
+async def save_user(message: types.Message):
+    try:
+        cursor.execute("""
+            INSERT INTO users (chat_id, username, first_name, last_name)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (chat_id) 
+            DO UPDATE SET 
+                username = EXCLUDED.username,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                last_activity = CURRENT_TIMESTAMP;
+        """, (
+            message.from_user.id,
+            message.from_user.username,
+            message.from_user.first_name,
+            message.from_user.last_name
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"Ошибка при сохранении пользователя: {e}")
+
+# Добавляем функцию для отправки клавиатуры всем пользователям
+
+
+async def send_keyboard_to_all_users(bot):
+    try:
+        users = await get_all_users()
+        print(f"Отправка главной клавиатуры {len(users)} пользователям...")
+        for chat_id in users:
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text="Бот был перезапущен. Вот главное меню:",
+                    reply_markup=get_main_keyboard()
+                )
+                # Сохраняем состояние пользователя как main_menu
+                user_states[chat_id] = 'main_menu'
+                # Небольшая задержка, чтобы не превысить лимиты API
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                print(
+                    f"Ошибка при отправке клавиатуры пользователю {chat_id}: {e}")
+        print("Главная клавиатура отправлена всем пользователям")
+    except Exception as e:
+        print(f"Ошибка при отправке клавиатуры пользователям: {e}")
+
+# Изменяем блок try-except
 conn = None  # Инициализируем conn вне блока try
 try:
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     # Выводим сообщение об успешном подключении
     print("Успешно подключено к базе данных!")
+    # Просто вызываем синхронную функцию создания таблиц
     create_tables()
 except psycopg2.Error as e:
     print(f"Ошибка при подключении к базе данных: {e}")
@@ -76,13 +166,20 @@ g4f_dialog_sessions = {}
 active_generations = {}  # Словарь для отслеживания генерации сообщений
 user_states = {}  # {chat_id: [state1, state2, ...]}
 
-bot = telebot.TeleBot(BOT_TOKEN)
 
+async def setup_handlers(bot):
+    # Отправляем уведомление администратору при запуске
+    await send_admin_notification(bot)
 
-def setup_handlers(bot):
-    @bot.message_handler(commands=['start'])
+    # Отправляем клавиатуру всем пользователям
+    await send_keyboard_to_all_users(bot)
+
+    @dp.message(Command('start'))
     async def start(message: types.Message):
         try:
+            # Сохраняем пользователя в базу данных
+            await save_user(message)
+
             await message.answer(
                 f"Привет, {message.from_user.first_name}!\n\n"
                 "Я бот, который предоставляет доступ к различным нейросетям и другим полезным функциям.\n\n"
@@ -99,7 +196,7 @@ def setup_handlers(bot):
             logger.error(f"Error in start command: {e}")
             await message.answer('Произошла ошибка')
 
-    @bot.message_handler(commands=['test'])
+    @dp.message(Command('test'))
     async def test(message: types.Message):
         text = "* Это *не жирный* и не *курсив*, но **это жирный**, а *это курсив*."
         clean_text = clean_text  # Предполагается, что эта переменная определена где-то выше
@@ -198,7 +295,7 @@ def setup_handlers(bot):
                 await sent_message.delete()
 
                 # Сохраняем состояние для следующего сообщения
-                await DialogStates.waiting_for_dialog.set()
+                await state.set_state(DialogStates.waiting_for_dialog)
                 await save_user_state(state, model_name)
 
             except Exception as e:
@@ -208,7 +305,7 @@ def setup_handlers(bot):
                     f"Произошла ошибка генерации контента: {str(e)}\nПожалуйста, попробуйте снова."
                 )
                 # Сохраняем состояние для следующего сообщения
-                await DialogStates.waiting_for_dialog.set()
+                await state.set_state(DialogStates.waiting_for_dialog)
                 await save_user_state(state, model_name)
 
         except Exception as e:
@@ -216,7 +313,7 @@ def setup_handlers(bot):
                 f"Ошибка в диалоге Gemini: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}"
             )
             await message.answer(f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте снова.")
-            await DialogStates.waiting_for_dialog.set()
+            await state.set_state(DialogStates.waiting_for_dialog)
             await save_user_state(state, model_name)
 
     async def handle_g4f_dialog(message: types.Message, state: FSMContext):
@@ -287,7 +384,7 @@ def setup_handlers(bot):
             await sent_message.delete()
 
             # Сохраняем состояние для следующего сообщения
-            await DialogStates.waiting_for_g4f_dialog.set()
+            await state.set_state(DialogStates.waiting_for_g4f_dialog)
 
         except Exception as e:
             error_message = f"Ошибка: {type(e).__name__} - {str(e)}"
@@ -307,21 +404,35 @@ def setup_handlers(bot):
                 await message.answer("Ошибка при отправке сообщения. Попробуйте позже.")
 
             # Сохраняем состояние несмотря на ошибку
-            await DialogStates.waiting_for_g4f_dialog.set()
+            await state.set_state(DialogStates.waiting_for_g4f_dialog)
 
-    async def save_user_state(state: FSMContext, new_state: str):
+    async def save_user_state(state_or_chat_id, new_state: str):
         """
-        Сохраняет текущее состояние пользователя в FSM.
+        Сохраняет текущее состояние пользователя.
 
         Args:
-            state: FSMContext объект для работы с состоянием
+            state_or_chat_id: FSMContext объект или chat_id пользователя
             new_state: Новое состояние для сохранения
         """
-        async with state.proxy() as data:
+        if isinstance(state_or_chat_id, int):
+            # Если передан chat_id, просто сохраняем состояние в словарь
+            user_states[state_or_chat_id] = new_state
+        else:
+            # Если передан FSMContext, сохраняем в FSM
+            state = state_or_chat_id
+            data = await state.get_data()  # Получаем данные состояния
             if 'states_history' not in data:
                 data['states_history'] = []
             data['states_history'].append(new_state)
             data['current_state'] = new_state
+            await state.update_data(data)  # Обновляем данные состояния
+
+            # Также сохраняем в словарь для совместимости
+            try:
+                chat_id = state.key.chat_id
+                user_states[chat_id] = new_state
+            except:
+                pass  # Если не удалось получить chat_id, просто пропускаем
 
     async def get_previous_user_state(state: FSMContext) -> str | None:
         """
@@ -333,13 +444,13 @@ def setup_handlers(bot):
         Returns:
             str | None: Предыдущее состояние или None если истории нет
         """
-        async with state.proxy() as data:
-            if 'states_history' in data and len(data['states_history']) > 1:
-                data['states_history'].pop()  # Убираем текущее состояние
-                previous_state = data['states_history'][-1]  # Берем предыдущее
-                data['current_state'] = previous_state
-                return previous_state
-            return None
+        data = await state.get_data()
+        if 'states_history' in data and len(data['states_history']) > 1:
+            data['states_history'].pop()  # Убираем текущее состояние
+            previous_state = data['states_history'][-1]  # Берем предыдущее
+            data['current_state'] = previous_state
+            return previous_state
+        return None
 
     async def save_dialog_message(chat_id: int, ai_name: str, role: str, content: str):
         """
@@ -435,17 +546,26 @@ def setup_handlers(bot):
             return json.loads(result[0])
         return []
 
-    @bot.message_handler(commands=['user_states'])
-    def show_user_states(message):
+    @dp.message(Command('user_states'))
+    async def show_user_states(message: types.Message):
         if message.from_user.id != ADMIN_ID:
-            bot.send_message(
-                message.chat.id, "🚫 У вас нет прав для использования этой команды.")
+            await message.answer("🚫 У вас нет прав для использования этой команды.")
             return
 
-        bot.send_message(
-            message.chat.id, f"👥 *Состояния пользователей:*\n{user_states}", parse_mode="Markdown")
+        await message.answer(f"👥 *Состояния пользователей:*\n{user_states}", parse_mode="Markdown")
 
-    @bot.message_handler(commands=['dialog_sessions'])
+    @dp.message(Command('send_keyboard'))
+    async def send_keyboard_command(message: types.Message):
+        """Отправляет клавиатуру всем пользователям (только для админа)."""
+        if message.from_user.id != ADMIN_ID:
+            await message.answer("🚫 У вас нет прав для использования этой команды.")
+            return
+
+        await message.answer("Начинаю отправку клавиатуры всем пользователям...")
+        await send_keyboard_to_all_users(dp.bot)
+        await message.answer("✅ Клавиатура отправлена всем пользователям.")
+
+    @dp.message(Command('dialog_sessions'))
     async def show_dialog_sessions(message: types.Message):
         """Показывает историю диалогов (только для админа)."""
         if message.from_user.id != ADMIN_ID:
@@ -464,7 +584,7 @@ def setup_handlers(bot):
 
         await message.answer(text, parse_mode=types.ParseMode.MARKDOWN_V2)
 
-    @bot.message_handler(commands=['active_generations'])
+    @dp.message(Command('active_generations'))
     async def show_active_generations(message: types.Message):
         """Показывает активные генерации (только для админа)."""
         if message.from_user.id != ADMIN_ID:
@@ -476,55 +596,57 @@ def setup_handlers(bot):
             parse_mode=types.ParseMode.MARKDOWN_V2
         )
 
-    @bot.message_handler(func=lambda message: message.text == '⬅️ Назад')
-    def back(message):
+    @dp.message(F.text == '⬅️ Назад')
+    async def back(message: types.Message):
         chat_id = message.chat.id
         previous_state = get_previous_user_state(message)
 
         if previous_state == 'ai_selection':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_ai_selection_keyboard())
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_ai_selection_keyboard())
         elif previous_state == 'text_text':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_text_text_button())
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_text_text_button())
         elif previous_state == 'text_image':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_text_image_button())
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_text_image_button())
         elif previous_state == 'text_voice':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_text_voice_keyboard())
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_text_voice_keyboard())
         elif previous_state == 'nocode':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_nocode_keyboard())
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_nocode_keyboard())
         elif previous_state == 'gemini_model_selection':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_gemini_model_keyboard())
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_gemini_model_keyboard())
         elif previous_state == 'g4f_model_selection':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_g4f_model_keyboard())
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_g4f_model_keyboard())
         elif previous_state == 'appearance':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_appearance_keyboard())
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_appearance_keyboard())
         elif previous_state == 'photo':
-            bot.send_message(message.chat.id, "⬅️ Назад",
-                             reply_markup=get_photo_keyboard())
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_photo_keyboard())
 
         else:
-            bot.send_message(message.chat.id, "⬅️ Назад",
+            await message.answer("⬅️ Назад",
+                                 reply_markup=get_main_keyboard())
+            await save_user_state(message.chat.id, 'main_menu')
+
+    @dp.message(F.text == 'Видео')
+    async def handle_video(message: types.Message):
+        await message.answer("Видео недоступно на сервере.",
                              reply_markup=get_main_keyboard())
-            save_user_state(message.chat.id, 'main_menu')
+        # Сохраняем состояние
+        await save_user_state(message.chat.id, 'main_menu')
 
-    @bot.message_handler(func=lambda message: message.text == 'Видео')
-    def handle_video(message):
-        bot.send_message(message.chat.id, "Видео недоступно на сервере.",
-                         reply_markup=get_main_keyboard())
-        save_user_state(message.chat.id, 'main_menu')  # Сохраняем состояние
-
-    @bot.message_handler(func=lambda message: message.text == 'Компьютер')
-    def handle_computer(message):
-        bot.send_message(message.chat.id, "Функции управления компьютером недоступны.",
-                         reply_markup=get_main_keyboard())
-        save_user_state(message.chat.id, 'main_menu')  # Сохраняем состояние
+    @dp.message(F.text == 'Компьютер')
+    async def handle_computer(message: types.Message):
+        await message.answer("Функции управления компьютером недоступны.",
+                             reply_markup=get_main_keyboard())
+        # Сохраняем состояние
+        await save_user_state(message.chat.id, 'main_menu')
 
     class ChatBotG4F:
         def __init__(self):
@@ -555,31 +677,37 @@ def setup_handlers(bot):
     # Создаем экземпляр бота для G4F
     g4f_bot = ChatBotG4F()
 
-    @bot.message_handler(func=lambda message: message.text == 'Нейросети')
+    @dp.message(F.text == 'Нейросети')
     async def handle_ai(message: types.Message):
+        # Сохраняем пользователя
+        await save_user(message)
         await message.answer(
             "Выберите AI:",
             reply_markup=get_ai_selection_keyboard()
         )
         await save_user_state(message.chat.id, 'ai_selection')
 
-    @bot.message_handler(func=lambda message: message.text == '🦆 Нейросети в интернете')
+    @dp.message(F.text == '🦆 Нейросети в интернете')
     async def handle_ai_web(message: types.Message):
+        # Сохраняем пользователя
+        await save_user(message)
         await message.answer(
             "Открываю",
             reply_markup=get_ai_selection_keyboard()
         )
         await save_user_state(message.chat.id, 'ai_selection')
 
-    @bot.message_handler(func=lambda message: message.text == '🤖 Выбор AI')
+    @dp.message(F.text == '🤖 Выбор AI')
     async def choose_ai(message: types.Message):
+        # Сохраняем пользователя
+        await save_user(message)
         await message.answer(
             "Выберите AI:",
             reply_markup=get_ai_selection_keyboard()
         )
         await save_user_state(message.chat.id, 'ai_selection')
 
-    @bot.message_handler(lambda message: message.text in ['ChatGPT🌐', 'Gemini', 'G4F (Аналог ChatGPT)', 'Microsoft Copilot🌐', 'Github Copilot🌐'])
+    @dp.message(F.text.in_(['ChatGPT🌐', 'Gemini', 'G4F (Аналог ChatGPT)', 'Microsoft Copilot🌐', 'Github Copilot🌐']))
     async def handle_ai_choice(message: types.Message, state: FSMContext):
         if message.text == 'Gemini':
             await message.answer(
@@ -587,7 +715,8 @@ def setup_handlers(bot):
                 reply_markup=get_gemini_model_keyboard()
             )
             await save_user_state(state, 'gemini_model_selection')
-            await DialogStates.waiting_for_model_selection.set()
+            # ИСПРАВЛЕНО
+            await state.set_state(DialogStates.waiting_for_model_selection)
 
         elif message.text == 'G4F (Аналог ChatGPT)':
             await message.answer(
@@ -595,7 +724,7 @@ def setup_handlers(bot):
                 reply_markup=get_g4f_model_keyboard()
             )
             await save_user_state(state, 'g4f_model_selection')
-            await DialogStates.waiting_for_g4f_model.set()
+            await state.set_state(DialogStates.waiting_for_g4f_model)
 
         elif message.text == '⬅️ Назад':
             await message.answer(
@@ -604,7 +733,7 @@ def setup_handlers(bot):
             )
             await save_user_state(state, 'main_menu')
 
-    @bot.message_handler(state=DialogStates.waiting_for_g4f_model)
+    @dp.message(StateFilter(DialogStates.waiting_for_g4f_model))
     async def handle_g4f_model_selection(message: types.Message, state: FSMContext):
         if message.text == '⬅️ Назад':
             await choose_ai(message)
@@ -624,17 +753,17 @@ def setup_handlers(bot):
                 reply_markup=get_dialog_keyboard()
             )
             await save_user_state(state, 'g4f_dialog')
-            await DialogStates.waiting_for_g4f_dialog.set()
+            await state.set_state(DialogStates.waiting_for_g4f_dialog)
         else:
             await message.answer("Неверный выбор модели. Попробуйте снова.")
 
-    @bot.callback_query_handler(lambda call: call.data.startswith("stop_"))
+    @dp.callback_query(F.data.startswith("stop_"))
     async def stop_generation(call: types.CallbackQuery):
         chat_id = int(call.data.split("_")[1])
         active_generations[chat_id] = False
         await call.message.edit_text("⏹️ Генерация остановлена.")
 
-    @dp.message_handler(state=DialogStates.waiting_for_model_selection)
+    @dp.message(StateFilter(DialogStates.waiting_for_model_selection))
     async def handle_model_selection(message: types.Message, state: FSMContext):
         model_name = None
 
@@ -673,13 +802,12 @@ def setup_handlers(bot):
             reply_markup=get_dialog_keyboard()
         )
         await save_user_state(state, 'gemini_dialog')
-        await DialogStates.waiting_for_dialog.set()
+        await state.set_state(DialogStates.waiting_for_dialog)
 
     def translate_text(text, target_lang="en"):
         return GoogleTranslator(source="auto", target=target_lang).translate(text)
 
-
-    @dp.message_handler(lambda message: message.text == 'Midjourney')
+    @dp.message(lambda message: message.text == 'Midjourney')
     async def handle_midjourney_choice(message: Message):
         await message.answer(
             "Вы выбрали Midjourney. Введите запрос для генерации изображения.",
@@ -687,7 +815,7 @@ def setup_handlers(bot):
         )
         user_states[message.chat.id] = 'midjourney_dialog'
 
-    @dp.message_handler(lambda message: user_states.get(message.chat.id) == 'midjourney_dialog')
+    @dp.message(lambda message: user_states.get(message.chat.id) == 'midjourney_dialog')
     async def handle_midjourney(message: Message):
         chat_id = message.chat.id
         if message.text in ['⬅️ Назад', '⏹️ Завершить диалог']:
@@ -704,7 +832,8 @@ def setup_handlers(bot):
 
         stop_event = threading.Event()
         loading_thread = threading.Thread(
-            target=lambda: asyncio.run(update_loading_message(loading_message, stop_event))
+            target=lambda: asyncio.run(
+                update_loading_message(loading_message, stop_event))
         )
         loading_thread.start()
 
@@ -726,92 +855,35 @@ def setup_handlers(bot):
 
         elapsed_time = round(time.time() - start_time, 2)
 
-        await bot.edit_message_text(
+        await dp.bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=loading_message.message_id,
             text=f"✅ Картинка сгенерирована за {elapsed_time} сек!"
         )
-        await bot.send_photo(message.chat.id, photo=image_data)
-        
-    def translate_text(text, target_lang="en"):
-        return GoogleTranslator(source="auto", target=target_lang).translate(text)
+        await dp.bot.send_photo(message.chat.id, photo=image_data)
 
     async def update_loading_message(message: Message, stop_event):
         dots = ""
         counter = 0
 
         while not stop_event.is_set():
-            dots = "." * (counter % 4)  # Меняем количество точек от 0 до 3
-            elapsed_time = counter  # Время в секундах
+            dots = "." * (counter % 4)
+            elapsed_time = counter
             new_text = f"Генерация картинки{dots}\nГенерируется лишь: {elapsed_time} сек"
 
             try:
-                await bot.edit_message_text(
+                await dp.bot.edit_message_text(
                     chat_id=message.chat.id,
                     message_id=message.message_id,
                     text=new_text
                 )
             except Exception:
-                pass  # Если сообщение уже изменено, просто пропускаем
+                pass
 
             counter += 1
             await asyncio.sleep(1)
 
-    @dp.message_handler(lambda message: message.text == 'Midjourney')
-    async def handle_midjourney_choice(message: Message):
-        await message.answer(
-            "Вы выбрали Midjourney. Введите запрос для генерации изображения.",
-            reply_markup=get_dialog_keyboard()
-        )
-        user_states[message.chat.id] = 'midjourney_dialog'
-
-    @dp.message_handler(lambda message: user_states.get(message.chat.id) == 'midjourney_dialog')
-    async def handle_midjourney(message: Message):
-        chat_id = message.chat.id
-        if message.text in ['⬅️ Назад', '⏹️ Завершить диалог']:
-            await message.answer(
-                "Возврат в меню нейросетей.",
-                reply_markup=get_ai_selection_keyboard()
-            )
-            user_states.pop(chat_id, None)
-            return
-
-        translated_text = translate_text(message.text)
-
-        loading_message = await message.answer("Генерация картинки...")
-
-        stop_event = threading.Event()
-        loading_thread = threading.Thread(
-            target=lambda: asyncio.run(update_loading_message(loading_message, stop_event))
-        )
-        loading_thread.start()
-
-        start_time = time.time()
-
-        # 🖼️ Запрос к API для генерации картинки
-        client = Client()
-        response = client.images.generate(
-            model="flux",
-            prompt=translated_text,
-            response_format="url"
-        )
-
-        image_url = response.data[0].url
-        image_data = requests.get(image_url).content
-
-        stop_event.set()
-        loading_thread.join()
-
-        elapsed_time = round(time.time() - start_time, 2)
-
-        await bot.edit_message_text(
-            chat_id=message.chat.id,
-            message_id=loading_message.message_id,
-            text=f"✅ Картинка сгенерирована за {elapsed_time} сек!"
-        )
-        await bot.send_photo(message.chat.id, photo=image_data)
-
-    @dp.message_handler(lambda message: message.text == 'Текст-Текст')
+    @dp.message(lambda message: message.text == 'Текст-Текст')
     async def handle_ai_text_text(message: Message):
         await message.answer(
             """📄 *Категория: Текст-Текст*
@@ -827,11 +899,12 @@ def setup_handlers(bot):
             parse_mode="Markdown",
             reply_markup=get_text_text_button()
         )
+
     async def handle_ai_category(message: types.Message, category: str, text: str, keyboard):
         await message.answer(text, parse_mode="Markdown", reply_markup=keyboard)
-        save_user_state(message.chat.id, category)
+        await save_user_state(message.chat.id, category)
 
-    @dp.message_handler(lambda message: message.text == 'Текст-Изображение')
+    @dp.message(lambda message: message.text == 'Текст-Изображение')
     async def handle_ai_text_image(message: types.Message):
         await handle_ai_category(
             message, 'text_image',
@@ -844,7 +917,7 @@ def setup_handlers(bot):
             get_text_image_button()
         )
 
-    @dp.message_handler(lambda message: message.text == 'Текст-Голос')
+    @dp.message(lambda message: message.text == 'Текст-Голос')
     async def handle_ai_text_voice(message: types.Message):
         await handle_ai_category(
             message, 'text_voice',
@@ -858,7 +931,7 @@ def setup_handlers(bot):
             get_text_voice_keyboard()
         )
 
-    @dp.message_handler(lambda message: message.text == 'NoCode')
+    @dp.message(lambda message: message.text == 'NoCode')
     async def handle_ai_nocode(message: types.Message):
         await handle_ai_category(
             message, 'nocode',
@@ -871,10 +944,10 @@ def setup_handlers(bot):
             get_nocode_keyboard()
         )
 
-    @dp.message_handler(lambda message: message.text == 'Озвучка текста')
+    @dp.message(lambda message: message.text == 'Озвучка текста')
     async def handle_ai_hailuo(message: types.Message):
         chat_id = message.chat.id
-        save_user_state(chat_id, 'text_voice')
+        await save_user_state(chat_id, 'text_voice')
 
         markup = types.InlineKeyboardMarkup()
         hailuo_button = types.InlineKeyboardButton(
@@ -884,7 +957,7 @@ def setup_handlers(bot):
 
         await message.answer("Нажмите кнопку ниже, чтобы перейти к озвучке текста:", reply_markup=markup)
 
-    @dp.message_handler(lambda message: message.text == 'Внешность')
+    @dp.message(lambda message: message.text == 'Внешность')
     async def handle_ai_appearance(message: types.Message):
         await handle_ai_category(
             message, 'appearance',
@@ -897,7 +970,7 @@ def setup_handlers(bot):
             get_appearance_keyboard()
         )
 
-    @dp.message_handler(lambda message: message.text == 'Фото')
+    @dp.message(lambda message: message.text == 'Фото')
     async def handle_ai_photo(message: types.Message):
         await handle_ai_category(
             message, 'photo',
@@ -910,25 +983,59 @@ def setup_handlers(bot):
             get_photo_keyboard()
         )
 
-    @dp.message_handler(commands=['gemini'])
-    async def handle_gemini_command(message: types.Message):
+    @dp.message(Command('gemini'))
+    async def handle_gemini_command(message: types.Message, state: FSMContext):
         """Запуск Gemini по команде /gemini"""
         chat_id = message.chat.id
-        await message.answer("Вы выбрали Gemini.\nВведите запрос:", reply_markup=get_dialog_keyboard())
-        save_user_state(chat_id, 'gemini_dialog')
+        # Устанавливаем модель по умолчанию
+        model_name = 'gemini-1.5-flash'
 
-    @dp.message_handler(commands=['g4f'])
-    async def handle_g4f_command(message: types.Message):
+        # Сохраняем модель в состояние
+        await state.update_data(model_name=model_name)
+
+        await message.answer("Вы выбрали Gemini.\nВведите запрос:", reply_markup=get_dialog_keyboard())
+        await save_user_state(state, 'gemini_dialog')
+        # Устанавливаем состояние ожидания диалога
+        await state.set_state(DialogStates.waiting_for_dialog)  # ИСПРАВЛЕНО
+
+    @dp.message(Command('g4f'))
+    async def handle_g4f_command(message: types.Message, state: FSMContext):
         """Запуск G4F по команде /g4f"""
         chat_id = message.chat.id
         g4f_bot.set_model("gpt-4o-mini")
         await message.answer("Вы выбрали G4F. Введите ваш запрос:", reply_markup=get_dialog_keyboard())
-        save_user_state(chat_id, 'g4f_dialog')
+        await save_user_state(state, 'g4f_dialog')
 
-    @dp.message_handler(commands=['midjourney'])
-    async def handle_midjourney_command(message: types.Message):
+    @dp.message(Command('midjourney'))
+    async def handle_midjourney_command(message: types.Message, state: FSMContext):
         """Запуск Midjourney по команде /midjourney"""
         chat_id = message.chat.id
         await message.answer("Вы выбрали Midjourney. Введите запрос для генерации изображения:",
-                            reply_markup=get_dialog_keyboard())
-        save_user_state(chat_id, 'midjourney_dialog')
+                             reply_markup=get_dialog_keyboard())
+        await save_user_state(state, 'midjourney_dialog')
+
+    # Добавляем обработчик для состояния waiting_for_dialog
+    @dp.message(StateFilter(DialogStates.waiting_for_dialog))
+    async def process_dialog_message(message: types.Message, state: FSMContext):
+        """Обработчик сообщений в состоянии диалога с Gemini"""
+        logger.info(
+            f"process_dialog_message вызван: chat_id={message.chat.id}, текст={message.text}")
+        data = await state.get_data()
+        logger.info(f"Данные состояния: {data}")
+        model_name = data.get('model_name')
+        logger.info(f"Выбранная модель: {model_name}")
+
+        if not model_name:
+            model_name = 'gemini-1.5-flash'
+            logger.warning(
+                f"Модель не найдена в состоянии, используем {model_name}")
+
+        await handle_dialog(message, state, model_name)
+
+
+class UserStateFilter(BaseFilter):
+    def __init__(self, state_name: str):
+        self.state_name = state_name
+
+    async def __call__(self, message: Message) -> bool:
+        return user_states.get(message.chat.id) == self.state_name

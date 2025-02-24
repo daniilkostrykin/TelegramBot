@@ -7,8 +7,9 @@ import logging
 import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.methods import DeleteWebhook
+from aiogram.fsm.storage.memory import MemoryStorage
+from z.bot_handlers import setup_handlers, dp
 from z.config import BOT_TOKEN
-from z.bot_handlers import setup_handlers
 
 # Настройка логирования
 logging.basicConfig(
@@ -18,8 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Инициализация бота и диспетчера
-bot = Bot(BOT_TOKEN)
-dp = Dispatcher()
+bot = Bot(token=BOT_TOKEN)
 
 # Флаг работы бота
 is_running = True
@@ -32,7 +32,7 @@ async def start_bot():
         await bot(DeleteWebhook(drop_pending_updates=True))
 
         # Регистрируем обработчики
-        setup_handlers(dp)
+        await setup_handlers(bot)
 
         # Запускаем поллинг
         await dp.start_polling(bot)
@@ -43,7 +43,7 @@ async def start_bot():
 
 async def main():
     """Основная функция для запуска бота."""
-    global is_running
+    global is_running 
 
     logger.info("Бот запущен. Чтобы остановить бота, нажмите Ctrl+C.")
 
