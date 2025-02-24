@@ -17,7 +17,7 @@ from z.keyboards import *
 import psycopg2
 import json
 import traceback
-from aiogram import types, State, StatesGroup
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.dispatcher import Dispatcher
 from aiogram.utils import markdown
 from aiogram.dispatcher import FSMContext
