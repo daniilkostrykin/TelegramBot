@@ -207,34 +207,97 @@ async def setup_handlers(bot):
         # Отправляем сообщение с HTML форматированием
         await message.answer(clean_text, parse_mode=types.ParseMode.HTML)
 
-    def escape_markdown(text: str) -> str:
+    def prepare_markdown_text(text: str) -> str:
         """
-        Экранирует специальные символы для Markdown V2.
+        Подготавливает текст для корректного отображения в Markdown V2.
+        - Сохраняет блоки кода
+        - Удаляет одиночные * в начале строк (маркеры списка)
+        - Экранирует специальные символы
         """
-        chars = ['_', '*', '[', ']', '(', ')', '~', '`',
-                 '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        # Сохраняем блоки кода
+        code_blocks = []
+
+        def save_code_block(match):
+            code_blocks.append(match.group(0))
+            return f"CODE_BLOCK_{len(code_blocks)-1}"
+
+        # Временно сохраняем блоки кода
+        text = re.sub(r'```[\s\S]*?```', save_code_block, text)
+
+        # Удаляем одиночные * в начале строк (маркеры списка)
+        text = re.sub(r'^\s*\*\s', '', text, flags=re.MULTILINE)
+
+        # Удаляем множественные пробелы и переносы строк
+        text = re.sub(r'\n\s*\n', '\n\n', text)
+        text = re.sub(r' +', ' ', text)
+
+        # Экранируем специальные символы, кроме тех, что используются для форматирования
+        chars = ['[', ']', '(', ')', '~', '>', '#', '+',
+                 '-', '=', '|', '{', '}', '.', '!']
         for char in chars:
             text = text.replace(char, f'\\{char}')
+
+        # Восстанавливаем блоки кода
+        for i, block in enumerate(code_blocks):
+            text = text.replace(f"CODE_BLOCK_{i}", block)
+
         return text
+
+    def process_code_block(text: str) -> list:
+        """
+        Разделяет текст на обычный текст и блоки кода.
+        Возвращает список кортежей (текст, is_code).
+        """
+        parts = []
+        current_text = ""
+
+        # Находим все блоки кода
+        pattern = r'```(?:python)?\n([\s\S]*?)```'
+        last_end = 0
+
+        for match in re.finditer(pattern, text):
+            # Добавляем текст до блока кода
+            if match.start() > last_end:
+                parts.append((text[last_end:match.start()], False))
+
+            # Добавляем сам блок кода
+            parts.append((match.group(1), True))
+            last_end = match.end()
+
+        # Добавляем оставшийся текст
+        if last_end < len(text):
+            parts.append((text[last_end:], False))
+
+        return parts if parts else [(text, False)]
 
     async def safe_send_message(message: types.Message, text: str):
         MAX_LENGTH = 4000
         try:
-            # Экранируем специальные символы
-            text = escape_markdown(text)
+            # Разделяем текст на части с кодом и без
+            parts = process_code_block(text)
 
-            # Разбиваем на части если текст длинный
-            for i in range(0, len(text), MAX_LENGTH):
-                chunk = text[i:i + MAX_LENGTH]
-                await message.answer(
-                    chunk,
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await asyncio.sleep(0.5)  # Асинхронная задержка
+            for content, is_code in parts:
+                if not content.strip():
+                    continue
+
+                if is_code:
+                    # Отправляем код без форматирования
+                    await message.answer(f"```\n{content}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                else:
+                    # Форматируем обычный текст
+                    formatted_text = prepare_markdown_text(content)
+
+                    # Разбиваем на части если текст длинный
+                    for i in range(0, len(formatted_text), MAX_LENGTH):
+                        chunk = formatted_text[i:i + MAX_LENGTH]
+                        await message.answer(chunk, parse_mode=ParseMode.MARKDOWN_V2)
+
+                await asyncio.sleep(0.5)
+
         except Exception as e:
-            # Если всё ещё есть ошибка, отправляем без форматирования
             print(f"Ошибка форматирования: {e}")
-            await message.answer(text, parse_mode=None)
+            # Если все попытки форматирования не удались, отправляем текст как есть
+            await message.answer(text)
 
     async def handle_dialog(message: types.Message, state: FSMContext, model_name: str, test_query: str = None):
         chat_id = message.chat.id
