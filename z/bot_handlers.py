@@ -5,9 +5,8 @@ import time
 import requests
 import logging
 import os
-from z.config import ADMIN_ID, POPULAR_SITES
+from z.config import ADMIN_ID, POPULAR_SITES, GEMINI_API_KEY, BOT_TOKEN, MISTRAL_API_KEY
 import google.generativeai as genai
-from z.config import GEMINI_API_KEY, BOT_TOKEN
 from g4f.client import Client
 from deep_translator import GoogleTranslator
 from aiogram.types import Message
@@ -25,6 +24,7 @@ from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.filters import BaseFilter
 from mistralai import Mistral
+import aiohttp
 
 
 class DialogStates(StatesGroup):
@@ -33,6 +33,13 @@ class DialogStates(StatesGroup):
     waiting_for_model_selection = State()
     waiting_for_g4f_model = State()
     waiting_for_mistral_dialog = State()
+    waiting_for_mistral_model = State()
+    waiting_for_text_image = State()
+    waiting_for_text_voice = State()
+    waiting_for_nocode = State()
+    waiting_for_appearance = State()
+    waiting_for_photo = State()
+    waiting_for_midjourney = State()
 
 
 # DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:XgFOPaWGkymuYpcXKkuSJwIlcPihcHKI@autorack.proxy.rlwy.net:36255/railway")
@@ -105,8 +112,8 @@ async def save_user(message: types.Message):
         cursor.execute("""
             INSERT INTO users (chat_id, username, first_name, last_name)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (chat_id) 
-            DO UPDATE SET 
+            ON CONFLICT (chat_id)
+            DO UPDATE SET
                 username = EXCLUDED.username,
                 first_name = EXCLUDED.first_name,
                 last_name = EXCLUDED.last_name,
@@ -530,22 +537,6 @@ async def setup_handlers(bot):
 
             # Объединяем старые и новые сообщения
             new_messages = old_messages + [{"role": role, "parts": [content]}]
-
-            # Сохраняем обновленную историю
-            cursor.execute("""
-                INSERT INTO dialog_sessions (chat_id, ai_name, messages)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (chat_id, ai_name)
-                DO UPDATE SET messages = %s;
-            """, (
-                chat_id,
-                ai_name,
-                json.dumps(new_messages, ensure_ascii=False),
-                json.dumps(new_messages, ensure_ascii=False)
-            ))
-            await asyncio.to_thread(conn.commit)
-            print("[LOG] Сообщение успешно сохранено в БД.")
-
         except Exception as e:
             print(f"[ERROR] Ошибка при сохранении в БД: {e}")
             print(traceback.format_exc())
@@ -763,11 +754,11 @@ async def setup_handlers(bot):
 
         elif message.text == 'Mistral AI':
             await message.answer(
-                "Вы выбрали Mistral AI. Начните диалог.",
-                reply_markup=get_dialog_keyboard()
+                "Вы выбрали Mistral AI. Выберите модель:",
+                reply_markup=get_mistral_model_keyboard()
             )
-            await save_user_state(state, 'mistral_dialog')
-            await state.set_state(DialogStates.waiting_for_mistral_dialog)
+            await save_user_state(state, 'mistral_model_selection')
+            await state.set_state(DialogStates.waiting_for_mistral_model)
 
         elif message.text == '⬅️ Назад':
             await message.answer(
@@ -939,14 +930,14 @@ async def setup_handlers(bot):
     async def handle_ai_text_text(message: Message):
         await message.answer(
             """📄 *Категория: Текст-Текст*
-            
+
             Нейросети для работы с текстом:
             - *ChatGPT* – генерация и анализ текста.
             - *Gemini* – текстовая обработка от Google.
             - *G4F* – бесплатная альтернатива ChatGPT.
             - *Microsoft Copilot* – помощник для программистов.
             - *Github Copilot* – помощник для программистов.
-            
+
             Выберите модель:""",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=get_text_text_button()
@@ -957,7 +948,7 @@ async def setup_handlers(bot):
         await save_user_state(message.chat.id, category)
 
     @dp.message(lambda message: message.text == 'Текст-Изображение')
-    async def handle_ai_text_image(message: types.Message):
+    async def handle_ai_text_image(message: types.Message, state: FSMContext):
         await handle_ai_category(
             message, 'text_image',
             """🖼️ *Категория: Текст-Изображение*
@@ -968,9 +959,10 @@ async def setup_handlers(bot):
             Выберите сервис:""",
             get_text_image_button()
         )
+        await state.set_state(DialogStates.waiting_for_text_image)
 
     @dp.message(lambda message: message.text == 'Текст-Голос')
-    async def handle_ai_text_voice(message: types.Message):
+    async def handle_ai_text_voice(message: types.Message, state: FSMContext):
         await handle_ai_category(
             message, 'text_voice',
             """🔊 *Категория: Текст-Голос*
@@ -982,9 +974,10 @@ async def setup_handlers(bot):
             Выберите сервис:""",
             get_text_voice_keyboard()
         )
+        await state.set_state(DialogStates.waiting_for_text_voice)
 
     @dp.message(lambda message: message.text == 'NoCode')
-    async def handle_ai_nocode(message: types.Message):
+    async def handle_ai_nocode(message: types.Message, state: FSMContext):
         await handle_ai_category(
             message, 'nocode',
             """🛠️ *Категория: NoCode*
@@ -995,22 +988,10 @@ async def setup_handlers(bot):
             Выберите платформу:""",
             get_nocode_keyboard()
         )
-
-    @dp.message(lambda message: message.text == 'Озвучка текста')
-    async def handle_ai_hailuo(message: types.Message):
-        chat_id = message.chat.id
-        await save_user_state(chat_id, 'text_voice')
-
-        markup = types.InlineKeyboardMarkup()
-        hailuo_button = types.InlineKeyboardButton(
-            text="Перейти к Озвучке текста", url="https://www.hailuo.ai/audio"
-        )
-        markup.add(hailuo_button)
-
-        await message.answer("Нажмите кнопку ниже, чтобы перейти к озвучке текста:", reply_markup=markup)
+        await state.set_state(DialogStates.waiting_for_nocode)
 
     @dp.message(lambda message: message.text == 'Внешность')
-    async def handle_ai_appearance(message: types.Message):
+    async def handle_ai_appearance(message: types.Message, state: FSMContext):
         await handle_ai_category(
             message, 'appearance',
             """🎭 *Категория: Внешность*
@@ -1021,19 +1002,22 @@ async def setup_handlers(bot):
             Выберите сервис:""",
             get_appearance_keyboard()
         )
+        await state.set_state(DialogStates.waiting_for_appearance)
 
     @dp.message(lambda message: message.text == 'Фото')
-    async def handle_ai_photo(message: types.Message):
-        await handle_ai_category(
-            message, 'photo',
+    async def handle_ai_photo(message: types.Message, state: FSMContext):
+        await message.answer(
             """📸 *Категория: Фото*
 
             Сервисы для обработки изображений:
             - *Memenome* – создание видео с текстом для людей с СДВГ.
 
             Выберите сервис:""",
-            get_photo_keyboard()
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=get_photo_keyboard()
         )
+        await save_user_state(message.chat.id, 'photo')
+        await state.set_state(DialogStates.waiting_for_photo)
 
     @dp.message(Command('gemini'))
     async def handle_gemini_command(message: types.Message, state: FSMContext):
@@ -1070,9 +1054,9 @@ async def setup_handlers(bot):
     async def handle_mistral_command(message: types.Message, state: FSMContext):
         """Запуск Mistral AI по команде /mistral"""
         chat_id = message.chat.id
-        await message.answer("Вы выбрали Mistral AI. Начните диалог:", reply_markup=get_dialog_keyboard())
-        await save_user_state(state, 'mistral_dialog')
-        await state.set_state(DialogStates.waiting_for_mistral_dialog)
+        await message.answer("Вы выбрали Mistral AI. Выберите модель:", reply_markup=get_mistral_model_keyboard())
+        await save_user_state(state, 'mistral_model_selection')
+        await state.set_state(DialogStates.waiting_for_mistral_model)
 
     # Добавляем обработчик для состояния waiting_for_dialog
     @dp.message(StateFilter(DialogStates.waiting_for_dialog))
@@ -1128,6 +1112,11 @@ async def setup_handlers(bot):
             return
 
         try:
+            # Получаем выбранную модель из состояния
+            data = await state.get_data()
+            # По умолчанию используем mistral-small-latest
+            model_name = data.get('mistral_model', 'mistral-small-latest')
+
             # Сохраняем сообщение пользователя
             await save_dialog_message(chat_id, "mistral", "user", message.text)
             sent_message = await message.answer("Генерация ответа...")
@@ -1149,9 +1138,9 @@ async def setup_handlers(bot):
                             "content": content
                         })
 
-            # Запрос к Mistral AI
+            # Запрос к Mistral AI с выбранной моделью
             chat_response = mistral_client.chat.complete(
-                model=mistral_model,
+                model=model_name,
                 messages=mistral_messages
             )
 
@@ -1168,6 +1157,259 @@ async def setup_handlers(bot):
             logger.error(f"Ошибка Mistral API: {e}")
             await message.answer(f"Произошла ошибка при генерации ответа: {str(e)}. Попробуйте позже.")
 
+    @dp.message(Command('get_mistral_models'))
+    async def get_mistral_models(message: types.Message):
+        """Получение списка доступных моделей Mistral AI"""
+        try:
+            # Создаем заголовки для запроса
+            headers = {
+                "Authorization": f"Bearer {MISTRAL_API_KEY}",
+                "Content-Type": "application/json"
+            }
+
+            # Выполняем запрос к API
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://api.mistral.ai/v1/models", headers=headers) as response:
+                    if response.status == 200:
+                        models_data = await response.json()
+
+                        if "data" in models_data and models_data["data"]:
+                            models_text = "Доступные модели Mistral AI:\n\n"
+                            for model in models_data["data"]:
+                                models_text += f"• {model['id']}"
+                                if "description" in model:
+                                    models_text += f" - {model['description']}"
+                                models_text += "\n"
+                        else:
+                            models_text = "Нет доступных моделей."
+                    else:
+                        models_text = f"Ошибка при получении списка моделей. Код ответа: {response.status}"
+
+                    await message.answer(models_text)
+        except Exception as e:
+            logger.error(f"Ошибка при получении списка моделей Mistral: {e}")
+            await message.answer("Произошла ошибка при получении списка моделей. Попробуйте позже.")
+
+    @dp.message(StateFilter(DialogStates.waiting_for_mistral_model))
+    async def handle_mistral_model_selection(message: types.Message, state: FSMContext):
+        """Обработчик выбора модели Mistral AI"""
+        chat_id = message.chat.id
+
+        if message.text == '⬅️ Назад':
+            await message.answer(
+                "Возврат в меню выбора AI.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.finish()
+            return
+
+        # Маппинг моделей с их API именами
+        model_mapping = {
+            'Ministral 8b': 'ministral-8b-latest',
+            'Mistral Medium': 'mistral-medium-latest',
+            'Pixtral Large': 'pixtral-large-latest',
+            'Codestral': 'codestral-latest',
+            'Codestral Mamba': 'codestral-mamba-latest',
+            'Pixtral 12b': 'pixtral-12b-latest',
+            'Mistral Small': 'mistral-small-latest',
+            'Mistral Saba': 'mistral-saba-latest',
+            'Mistral Moderation': 'mistral-moderation-latest'
+        }
+
+        model_name = model_mapping.get(message.text)
+        if not model_name:
+            await message.answer("Пожалуйста, выберите модель из предложенных вариантов.")
+            return
+
+        # Сохраняем выбранную модель в состояние
+        await state.update_data(mistral_model=model_name)
+
+        await message.answer(
+            f"Вы выбрали модель {message.text}. Начните диалог:",
+            reply_markup=get_dialog_keyboard()
+        )
+        await save_user_state(state, 'mistral_dialog')
+        await state.set_state(DialogStates.waiting_for_mistral_dialog)
+
+    @dp.message(StateFilter(DialogStates.waiting_for_text_image))
+    async def handle_text_image_selection(message: types.Message, state: FSMContext):
+        if message.text == '⬅️ Назад':
+            await message.answer(
+                "Возврат в меню выбора AI.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.finish()
+            return
+
+        if message.text == "Midjourney":
+            await message.answer(
+                "Вы выбрали Midjourney. Введите запрос для генерации изображения:",
+                reply_markup=get_dialog_keyboard()
+            )
+            await save_user_state(state, 'midjourney_dialog')
+            await state.set_state(DialogStates.waiting_for_midjourney)
+        else:
+            await message.answer("Пожалуйста, выберите сервис из предложенных вариантов.")
+
+    @dp.message(StateFilter(DialogStates.waiting_for_text_voice))
+    async def handle_text_voice_selection(message: types.Message, state: FSMContext):
+        if message.text == '⬅️ Назад':
+            await message.answer(
+                "Возврат в меню выбора AI.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.finish()
+            return
+
+        valid_options = {
+            "Озвучка текста": "https://www.hailuo.ai/audio",
+            "Озвучка книги": "https://huggingface.co/spaces/drewThomasson/ebook2audiobook"
+        }
+
+        if message.text in valid_options:
+            markup = types.InlineKeyboardMarkup()
+            button = types.InlineKeyboardButton(
+                text=f"Перейти к {message.text}",
+                url=valid_options[message.text]
+            )
+            markup.add(button)
+            await message.answer(
+                f"Нажмите кнопку ниже, чтобы перейти к сервису {message.text}:",
+                reply_markup=markup
+            )
+        else:
+            await message.answer("Пожалуйста, выберите сервис из предложенных вариантов.")
+
+    @dp.message(StateFilter(DialogStates.waiting_for_nocode))
+    async def handle_nocode_selection(message: types.Message, state: FSMContext):
+        if message.text == '⬅️ Назад':
+            await message.answer(
+                "Возврат в меню выбора AI.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.finish()
+            return
+
+        if message.text == "Glide":
+            markup = types.InlineKeyboardMarkup()
+            button = types.InlineKeyboardButton(
+                text="Перейти к Glide",
+                url="https://www.glideapps.com/"
+            )
+            markup.add(button)
+            await message.answer(
+                "Нажмите кнопку ниже, чтобы перейти к Glide:",
+                reply_markup=markup
+            )
+        else:
+            await message.answer("Пожалуйста, выберите платформу из предложенных вариантов.")
+
+    @dp.message(StateFilter(DialogStates.waiting_for_appearance))
+    async def handle_appearance_selection(message: types.Message, state: FSMContext):
+        if message.text == '⬅️ Назад':
+            await message.answer(
+                "Возврат в меню выбора AI.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.finish()
+            return
+
+        if message.text == "Tough Tongue AI":
+            markup = types.InlineKeyboardMarkup()
+            button = types.InlineKeyboardButton(
+                text="Перейти к Tough Tongue AI",
+                url="https://app.toughtongueai.com/"
+            )
+            markup.add(button)
+            await message.answer(
+                "Нажмите кнопку ниже, чтобы перейти к Tough Tongue AI:",
+                reply_markup=markup
+            )
+        else:
+            await message.answer("Пожалуйста, выберите сервис из предложенных вариантов.")
+
+    @dp.message(StateFilter(DialogStates.waiting_for_photo))
+    async def handle_photo_selection(message: types.Message, state: FSMContext):
+        if message.text == '⬅️ Назад':
+            await message.answer(
+                "Возврат в меню выбора AI.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.finish()
+            return
+
+        if message.text == "Memenome":
+            markup = types.InlineKeyboardMarkup()
+            button = types.InlineKeyboardButton(
+                text="Перейти к Memenome",
+                url="https://www.memenome.gg/"
+            )
+            markup.add(button)
+            await message.answer(
+                "Нажмите кнопку ниже, чтобы перейти к Memenome:",
+                reply_markup=markup
+            )
+        else:
+            await message.answer("Пожалуйста, выберите сервис из предложенных вариантов.")
+
+    @dp.message(StateFilter(DialogStates.waiting_for_midjourney))
+    async def handle_midjourney_dialog(message: Message, state: FSMContext):
+        chat_id = message.chat.id
+
+        if message.text in ['⬅️ Назад', '⏹️ Завершить диалог']:
+            await message.answer(
+                "Возврат в меню нейросетей.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.finish()
+            return
+
+        translated_text = translate_text(message.text)
+        loading_message = await message.answer("Генерация картинки...")
+
+        stop_event = threading.Event()
+        loading_thread = threading.Thread(
+            target=lambda: asyncio.run(
+                update_loading_message(loading_message, stop_event))
+        )
+        loading_thread.start()
+
+        start_time = time.time()
+
+        try:
+            client = Client()
+            response = client.images.generate(
+                model="flux",
+                prompt=translated_text,
+                response_format="url"
+            )
+
+            image_url = response.data[0].url
+            image_data = requests.get(image_url).content
+
+            stop_event.set()
+            loading_thread.join()
+
+            elapsed_time = round(time.time() - start_time, 2)
+
+            await dp.bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=loading_message.message_id,
+                text=f"✅ Картинка сгенерирована за {elapsed_time} сек!"
+            )
+            await dp.bot.send_photo(message.chat.id, photo=image_data)
+        except Exception as e:
+            stop_event.set()
+            loading_thread.join()
+            await message.answer(f"Произошла ошибка при генерации изображения: {str(e)}")
+
 
 class UserStateFilter(BaseFilter):
     def __init__(self, state_name: str):
@@ -1178,6 +1420,4 @@ class UserStateFilter(BaseFilter):
 
 
 # Инициализация Mistral AI клиента
-mistral_api_key = "juUANmzy3vibCtu1SZs24XdXtBAKcPSA"
-mistral_client = Mistral(api_key=mistral_api_key)
-mistral_model = "mistral-small-latest"
+mistral_client = Mistral(api_key=MISTRAL_API_KEY)

@@ -121,12 +121,24 @@ def get_g4f_model_keyboard():
 def get_gemini_model_keyboard():
     keyboard = [
         [KeyboardButton(text='Gemini 2.0 Experimental')],
-        [KeyboardButton(text='Gemini 1.5 Pro'),
-         KeyboardButton(text='Gemini 1.5 Flash')],
-        [KeyboardButton(text='Gemini 2.0 Pro Experimental 02-05')],
-        [KeyboardButton(text='Gemini 2.0 Flash Thinking Experimental 01-21')],
-        [KeyboardButton(text='Gemini 2.0 Flash-Lite Preview 02-05')],
-        [KeyboardButton(text='Gemini 2.0 Flash')],
+        [KeyboardButton(text='Gemini 1.5 Pro'), KeyboardButton(
+            text='Gemini 1.5 Flash'), KeyboardButton(text='Gemini 2.0 Flash')],
+        [KeyboardButton(text='Gemini 2.0 Pro Experimental 02-05'), KeyboardButton(
+            text='Gemini 2.0 Flash Thinking Experimental 01-21'), KeyboardButton(text='Gemini 2.0 Flash-Lite Preview 02-05')],
+        [KeyboardButton(text='⬅️ Назад')]
+    ]
+    markup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    return markup
+
+
+def get_mistral_model_keyboard():
+    keyboard = [
+        [KeyboardButton(text='Ministral 8b'), KeyboardButton(
+            text='Mistral Medium'), KeyboardButton(text='Pixtral Large')],
+        [KeyboardButton(text='Codestral'), KeyboardButton(
+            text='Codestral Mamba'), KeyboardButton(text='Pixtral 12b')],
+        [KeyboardButton(text='Mistral Small'), KeyboardButton(
+            text='Mistral Saba'), KeyboardButton(text='Mistral Moderation')],
         [KeyboardButton(text='⬅️ Назад')]
     ]
     markup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
