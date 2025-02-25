@@ -589,17 +589,42 @@ async def setup_handlers(bot):
             await message.answer("🚫 У вас нет прав для использования этой команды.")
             return
 
-        cursor.execute("SELECT * FROM dialog_sessions")
+        cursor.execute(
+            "SELECT chat_id, ai_name, messages FROM dialog_sessions")
         users = cursor.fetchall()
 
         text = "💬 *История диалогов:*\n\n"
-        for chat_id, messages in users:
-            text += f"🔹 `{chat_id}`:\n"
-            dialog = json.loads(messages)
-            for msg in dialog[-5:]:  # Показываем последние 5 сообщений
-                text += f"  - *{msg['role']}*: {msg['content'][:100]}...\n"
+        for chat_id, ai_name, messages in users:
+            text += f"🔹 Чат {chat_id} с {ai_name}:\n"
+            try:
+                if isinstance(messages, str):
+                    dialog = json.loads(messages)
+                else:
+                    dialog = messages
 
-        await message.answer(text, parse_mode=ParseMode.MARKDOWN_V2)
+                if isinstance(dialog, list):
+                    for msg in dialog[-5:]:  # Показываем последние 5 сообщений
+                        role = msg.get('role', 'unknown')
+                        content = msg.get('parts', [None])[
+                            0] if 'parts' in msg else msg.get('content', 'no content')
+                        text += f"  - *{role}*: {str(content)[:100]}...\n"
+                else:
+                    text += "  - Ошибка формата диалога\n"
+            except json.JSONDecodeError:
+                text += "  - Ошибка при чтении сообщений\n"
+            except Exception as e:
+                text += f"  - Ошибка: {str(e)}\n"
+            text += "\n"
+
+        # Разбиваем длинное сообщение на части, если нужно
+        max_length = 4000
+        for i in range(0, len(text), max_length):
+            chunk = text[i:i + max_length]
+            try:
+                await message.answer(chunk, parse_mode=ParseMode.MARKDOWN)
+            except Exception:
+                # Если не удалось отправить с форматированием, отправляем без него
+                await message.answer(chunk)
 
     @dp.message(Command('active_generations'))
     async def show_active_generations(message: types.Message):
