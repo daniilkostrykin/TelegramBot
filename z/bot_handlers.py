@@ -1136,9 +1136,12 @@ async def setup_handlers(bot):
             await save_dialog_message(chat_id, "mistral", "user", message.text)
 
             # Запрос к Mistral AI с историей
-            chat_response = mistral_client.chat.complete(
+            chat_response = mistral_client.chat.completions.create(
                 model=mistral_model,
-                messages=messages
+                messages=[{
+                    "role": msg["role"],
+                    "content": msg["content"]
+                } for msg in messages]
             )
 
             response_text = chat_response.choices[0].message.content
