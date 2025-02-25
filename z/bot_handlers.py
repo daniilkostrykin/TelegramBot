@@ -1142,7 +1142,7 @@ async def setup_handlers(bot):
                         })
 
             # Запрос к Mistral AI
-            chat_response = mistral_client.chat.completions.create(
+            chat_response = mistral_client.chat.complete(
                 model=mistral_model,
                 messages=mistral_messages
             )
