@@ -210,50 +210,17 @@ async def setup_handlers(bot):
     def prepare_markdown_text(text: str) -> str:
         """
         Подготавливает текст для корректного отображения в Markdown V2.
-        - Сохраняет двойные звездочки ** для жирного текста
-        - Удаляет все одиночные звездочки *
+        - Удаляет одиночные * в начале строк
         - Экранирует специальные символы
         """
-        # Сохраняем блоки кода
-        code_blocks = []
-
-        def save_code_block(match):
-            code_blocks.append(match.group(0))
-            return f"CODE_BLOCK_{len(code_blocks)-1}"
-
-        # Временно сохраняем блоки кода
-        text = re.sub(r'```[\s\S]*?```', save_code_block, text)
-
-        # Сохраняем текст в двойных звездочках
-        bold_texts = []
-
-        def save_bold_text(match):
-            bold_texts.append(match.group(0))
-            return f"BOLD_{len(bold_texts)-1}"
-
-        # Сохраняем текст между двойными звездочками
-        text = re.sub(r'\*\*.*?\*\*', save_bold_text, text)
-
-        # Удаляем все оставшиеся одиночные звездочки
-        text = re.sub(r'\*', '', text)
-
-        # Удаляем множественные пробелы и переносы строк
-        text = re.sub(r'\n\s*\n', '\n\n', text)
-        text = re.sub(r' +', ' ', text)
+        # Удаляем одиночные * в начале строк
+        text = re.sub(r'^\s*\*\s', '', text, flags=re.MULTILINE)
 
         # Экранируем специальные символы
         chars = ['[', ']', '(', ')', '~', '>', '#', '+',
                  '-', '=', '|', '{', '}', '.', '!', '_']
         for char in chars:
             text = text.replace(char, f'\\{char}')
-
-        # Восстанавливаем жирный текст
-        for i, bold in enumerate(bold_texts):
-            text = text.replace(f"BOLD_{i}", bold)
-
-        # Восстанавливаем блоки кода
-        for i, block in enumerate(code_blocks):
-            text = text.replace(f"CODE_BLOCK_{i}", block)
 
         return text
 
