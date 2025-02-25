@@ -207,6 +207,35 @@ async def setup_handlers(bot):
         # Отправляем сообщение с HTML форматированием
         await message.answer(clean_text, parse_mode=types.ParseMode.HTML)
 
+    def escape_markdown(text: str) -> str:
+        """
+        Экранирует специальные символы для Markdown V2.
+        """
+        chars = ['_', '*', '[', ']', '(', ')', '~', '`',
+                 '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in chars:
+            text = text.replace(char, f'\\{char}')
+        return text
+
+    async def safe_send_message(message: types.Message, text: str):
+        MAX_LENGTH = 4000
+        try:
+            # Экранируем специальные символы
+            text = escape_markdown(text)
+
+            # Разбиваем на части если текст длинный
+            for i in range(0, len(text), MAX_LENGTH):
+                chunk = text[i:i + MAX_LENGTH]
+                await message.answer(
+                    chunk,
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+                await asyncio.sleep(0.5)  # Асинхронная задержка
+        except Exception as e:
+            # Если всё ещё есть ошибка, отправляем без форматирования
+            print(f"Ошибка форматирования: {e}")
+            await message.answer(text, parse_mode=None)
+
     async def handle_dialog(message: types.Message, state: FSMContext, model_name: str, test_query: str = None):
         chat_id = message.chat.id
         try:
@@ -222,19 +251,6 @@ async def setup_handlers(bot):
                 if chat_id in user_states:
                     del user_states[chat_id]
                 await save_user_state(state, 'ai_selection')
-                await state.finish()
-                return
-
-            elif message.text == '⬅️ Назад':
-                await message.answer(
-                    "Возврат в меню выбора Gemini модели.",
-                    reply_markup=get_gemini_model_keyboard()
-                )
-                await save_user_state(state, 'gemini_model_selection')
-                if (chat_id, model_name) in dialog_sessions:
-                    print(
-                        f"[WARNING] Удаляю dialog_sessions[{(chat_id, model_name)}]")
-                    del dialog_sessions[(chat_id, model_name)]
                 await state.finish()
                 return
 
@@ -255,43 +271,7 @@ async def setup_handlers(bot):
                 await save_dialog_message(chat_id, model_name,
                                           "model", response_text)
 
-                async def safe_send_message(text: str):
-                    MAX_LENGTH = 4000
-                    try:
-                        # Удаляем незакрытые маркеры в конце
-                        text = re.sub(r'[*_`][*_`]*$', '', text)
-
-                        # Разбиваем на части если текст длинный
-                        for i in range(0, len(text), MAX_LENGTH):
-                            chunk = text[i:i + MAX_LENGTH]
-                            # Проверяем и закрываем открытые теги форматирования
-                            chunk = close_formatting_tags(chunk)
-                            await message.answer(
-                                chunk,
-                                parse_mode=ParseMode.MARKDOWN_V2
-                            )
-                            await asyncio.sleep(0.5)  # Асинхронная задержка
-                    except Exception as e:
-                        # Если всё ещё есть ошибка, отправляем без форматирования
-                        print(f"Ошибка форматирования: {e}")
-                        await message.answer(text)
-
-                def close_formatting_tags(text: str) -> str:
-                    # Подсчёт открытых тегов
-                    open_bold = text.count('*') - text.count('**')
-                    open_italic = text.count('_')
-                    open_code = text.count('`')
-
-                    # Закрываем открытые теги
-                    if open_bold % 2:
-                        text += '*'
-                    if open_italic % 2:
-                        text += '_'
-                    if open_code % 2:
-                        text += '`'
-                    return text
-
-                await safe_send_message(response_text)
+                await safe_send_message(message, response_text)
                 await sent_message.delete()
 
                 # Сохраняем состояние для следующего сообщения
