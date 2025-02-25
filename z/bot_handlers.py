@@ -1066,6 +1066,14 @@ async def setup_handlers(bot):
                              reply_markup=get_dialog_keyboard())
         await save_user_state(state, 'midjourney_dialog')
 
+    @dp.message(Command('mistral'))
+    async def handle_mistral_command(message: types.Message, state: FSMContext):
+        """Запуск Mistral AI по команде /mistral"""
+        chat_id = message.chat.id
+        await message.answer("Вы выбрали Mistral AI. Начните диалог:", reply_markup=get_dialog_keyboard())
+        await save_user_state(state, 'mistral_dialog')
+        await state.set_state(DialogStates.waiting_for_mistral_dialog)
+
     # Добавляем обработчик для состояния waiting_for_dialog
     @dp.message(StateFilter(DialogStates.waiting_for_dialog))
     async def process_dialog_message(message: types.Message, state: FSMContext):
@@ -1094,6 +1102,8 @@ async def setup_handlers(bot):
                 "Диалог завершен.",
                 reply_markup=get_ai_selection_keyboard()
             )
+            if chat_id in dialog_sessions:
+                dialog_sessions.pop(chat_id, None)
             await save_user_state(state, 'ai_selection')
             await state.finish()
             return
@@ -1103,45 +1113,38 @@ async def setup_handlers(bot):
                 "Возврат в меню выбора AI.",
                 reply_markup=get_ai_selection_keyboard()
             )
+            if chat_id in dialog_sessions:
+                dialog_sessions.pop(chat_id, None)
             await save_user_state(state, 'ai_selection')
             await state.finish()
             return
 
         try:
-            sent_message = await message.answer("Генерация ответа...")
-
-            # Загружаем историю диалога
-            history = await get_dialog_history(chat_id, "mistral")
-            messages = []
-
-            # Преобразуем историю в формат Mistral
-            if history:
-                for msg in history:
-                    if isinstance(msg, dict) and "role" in msg and ("parts" in msg or "content" in msg):
-                        content = msg.get("parts", [None])[
-                            0] if "parts" in msg else msg.get("content")
-                        if content:
-                            messages.append({
-                                "role": msg["role"],
-                                "content": content
-                            })
-
-            # Добавляем текущее сообщение
-            messages.append({
-                "role": "user",
-                "content": message.text
-            })
-
             # Сохраняем сообщение пользователя
             await save_dialog_message(chat_id, "mistral", "user", message.text)
+            sent_message = await message.answer("Генерация ответа...")
 
-            # Запрос к Mistral AI с историей
+            # Получаем историю диалога из локального кэша
+            messages = dialog_sessions.get((chat_id, "mistral"), [])
+            print(
+                f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
+
+            # Преобразуем сообщения в формат Mistral
+            mistral_messages = []
+            for msg in messages:
+                if isinstance(msg, dict) and "role" in msg and ("parts" in msg or "content" in msg):
+                    content = msg.get("parts", [None])[
+                        0] if "parts" in msg else msg.get("content")
+                    if content:
+                        mistral_messages.append({
+                            "role": msg["role"],
+                            "content": content
+                        })
+
+            # Запрос к Mistral AI
             chat_response = mistral_client.chat.completions.create(
                 model=mistral_model,
-                messages=[{
-                    "role": msg["role"],
-                    "content": msg["content"]
-                } for msg in messages]
+                messages=mistral_messages
             )
 
             response_text = chat_response.choices[0].message.content
@@ -1154,11 +1157,8 @@ async def setup_handlers(bot):
             await safe_send_message(message, response_text)
 
         except Exception as e:
-            logging.error(f"Ошибка Mistral API: {e}")
+            logger.error(f"Ошибка Mistral API: {e}")
             await message.answer(f"Произошла ошибка при генерации ответа: {str(e)}. Попробуйте позже.")
-        except Exception as e:
-            logging.error(f"Неожиданная ошибка: {e}")
-            await message.answer("Произошла неожиданная ошибка. Попробуйте позже.")
 
 
 class UserStateFilter(BaseFilter):
