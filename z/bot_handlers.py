@@ -537,6 +537,7 @@ async def setup_handlers(bot):
 
             # Объединяем старые и новые сообщения
             new_messages = old_messages + [{"role": role, "parts": [content]}]
+
         except Exception as e:
             print(f"[ERROR] Ошибка при сохранении в БД: {e}")
             print(traceback.format_exc())
@@ -627,6 +628,7 @@ async def setup_handlers(bot):
             'nocode': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'gemini_model_selection': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'g4f_model_selection': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'mistral_model_selection': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'appearance': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'photo': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'midjourney_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
@@ -637,8 +639,8 @@ async def setup_handlers(bot):
             new_state, keyboard, message_text = state_transitions[current_state]
             await message.answer(message_text, reply_markup=keyboard)
             await save_user_state(state, new_state)
-            # Очищаем состояние FSM если возвращаемся в главное меню
-            if new_state == 'main_menu':
+            # Очищаем состояние FSM если возвращаемся в главное меню или меню выбора AI
+            if new_state in ['main_menu', 'ai_selection']:
                 await state.clear()
         else:
             # Если состояние не определено, возвращаемся в главное меню
@@ -763,9 +765,10 @@ async def setup_handlers(bot):
         elif message.text == '⬅️ Назад':
             await message.answer(
                 "Возврат в главное меню.",
-                reply_markup=get_main_keyboard()
+                reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'main_menu')
+            await state.clear()  # Очищаем состояние FSM
 
     @dp.message(StateFilter(DialogStates.waiting_for_g4f_model))
     async def handle_g4f_model_selection(message: types.Message, state: FSMContext):
@@ -802,6 +805,15 @@ async def setup_handlers(bot):
         chat_id = message.chat.id
         model_name = None
 
+        if message.text == '⬅️ Назад':
+            await message.answer(
+                "Возврат в меню выбора AI.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.clear()  # Очищаем состояние FSM
+            return
+
         # Очищаем предыдущие состояния и истории диалогов
         if chat_id in dialog_sessions:
             dialog_sessions.pop(chat_id, None)
@@ -819,23 +831,11 @@ async def setup_handlers(bot):
             'Gemini 2.0 Flash': 'gemini-2.0-flash'
         }
 
-        if message.text == '⬅️ Назад':
-            await message.answer(
-                "Возврат в меню выбора AI.",
-                reply_markup=get_ai_selection_keyboard()
-            )
-            await save_user_state(state, 'ai_selection')
-            await state.clear()
-            return
-
         model_name = model_mapping.get(message.text)
 
         if not model_name:
             await message.answer("Неверный выбор модели. Попробуйте снова.")
             return
-
-        # Очищаем предыдущее состояние
-        await state.clear()
 
         # Сохраняем выбранную модель в состояние
         await state.update_data(model_name=model_name)
