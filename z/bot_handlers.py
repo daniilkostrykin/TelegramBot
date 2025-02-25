@@ -24,6 +24,7 @@ import asyncio
 from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.filters import BaseFilter
+from mistralai import Mistral
 
 
 class DialogStates(StatesGroup):
@@ -31,6 +32,7 @@ class DialogStates(StatesGroup):
     waiting_for_g4f_dialog = State()
     waiting_for_model_selection = State()
     waiting_for_g4f_model = State()
+    waiting_for_mistral_dialog = State()
 
 
 # DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:XgFOPaWGkymuYpcXKkuSJwIlcPihcHKI@autorack.proxy.rlwy.net:36255/railway")
@@ -636,7 +638,8 @@ async def setup_handlers(bot):
             'g4f_model_selection': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'appearance': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'photo': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
-            'midjourney_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI.")
+            'midjourney_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'mistral_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI.")
         }
 
         if current_state in state_transitions:
@@ -731,7 +734,7 @@ async def setup_handlers(bot):
         )
         await save_user_state(message.chat.id, 'ai_selection')
 
-    @dp.message(F.text.in_(['ChatGPT🌐', 'Gemini', 'G4F (Аналог ChatGPT)', 'Microsoft Copilot🌐', 'Github Copilot🌐']))
+    @dp.message(F.text.in_(['ChatGPT🌐', 'Gemini', 'G4F (Аналог ChatGPT)', 'Microsoft Copilot🌐', 'Github Copilot🌐', 'Mistral AI']))
     async def handle_ai_choice(message: types.Message, state: FSMContext):
         chat_id = message.chat.id
 
@@ -757,6 +760,14 @@ async def setup_handlers(bot):
             )
             await save_user_state(state, 'g4f_model_selection')
             await state.set_state(DialogStates.waiting_for_g4f_model)
+
+        elif message.text == 'Mistral AI':
+            await message.answer(
+                "Вы выбрали Mistral AI. Начните диалог.",
+                reply_markup=get_dialog_keyboard()
+            )
+            await save_user_state(state, 'mistral_dialog')
+            await state.set_state(DialogStates.waiting_for_mistral_dialog)
 
         elif message.text == '⬅️ Назад':
             await message.answer(
@@ -1073,6 +1084,74 @@ async def setup_handlers(bot):
 
         await handle_dialog(message, state, model_name)
 
+    # Обработчик для диалога с Mistral
+    @dp.message(StateFilter(DialogStates.waiting_for_mistral_dialog))
+    async def handle_mistral_dialog(message: types.Message, state: FSMContext):
+        chat_id = message.chat.id
+
+        if message.text == '⏹️ Завершить диалог':
+            await message.answer(
+                "Диалог завершен.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.finish()
+            return
+
+        elif message.text == '⬅️ Назад':
+            await message.answer(
+                "Возврат в меню выбора AI.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            await save_user_state(state, 'ai_selection')
+            await state.finish()
+            return
+
+        try:
+            sent_message = await message.answer("Генерация ответа...")
+
+            # Загружаем историю диалога
+            history = await get_dialog_history(chat_id, "mistral")
+            messages = []
+
+            # Преобразуем историю в формат Mistral
+            for msg in history:
+                messages.append({
+                    "role": msg["role"],
+                    "content": msg["parts"][0] if isinstance(msg["parts"], list) else msg["parts"]
+                })
+
+            # Добавляем текущее сообщение
+            messages.append({
+                "role": "user",
+                "content": message.text
+            })
+
+            # Сохраняем сообщение пользователя
+            await save_dialog_message(chat_id, "mistral", "user", message.text)
+
+            # Запрос к Mistral AI с историей
+            chat_response = mistral_client.chat.complete(
+                model=mistral_model,
+                messages=messages
+            )
+
+            response_text = chat_response.choices[0].message.content
+
+            # Сохраняем ответ модели
+            await save_dialog_message(chat_id, "mistral", "assistant", response_text)
+
+            # Отправляем ответ
+            await sent_message.delete()
+            await safe_send_message(message, response_text)
+
+        except Exception as e:
+            logging.error(f"Ошибка Mistral API: {e}")
+            await message.answer("Произошла ошибка при генерации ответа. Попробуйте позже.")
+        except Exception as e:
+            logging.error(f"Неожиданная ошибка: {e}")
+            await message.answer("Произошла неожиданная ошибка. Попробуйте позже.")
+
 
 class UserStateFilter(BaseFilter):
     def __init__(self, state_name: str):
@@ -1080,3 +1159,9 @@ class UserStateFilter(BaseFilter):
 
     async def __call__(self, message: Message) -> bool:
         return user_states.get(message.chat.id) == self.state_name
+
+
+# Инициализация Mistral AI клиента
+mistral_api_key = "juUANmzy3vibCtu1SZs24XdXtBAKcPSA"
+mistral_client = Mistral(api_key=mistral_api_key)
+mistral_model = "mistral-small-latest"
