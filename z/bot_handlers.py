@@ -1115,11 +1115,16 @@ async def setup_handlers(bot):
             messages = []
 
             # Преобразуем историю в формат Mistral
-            for msg in history:
-                messages.append({
-                    "role": msg["role"],
-                    "content": msg["parts"][0] if isinstance(msg["parts"], list) else msg["parts"]
-                })
+            if history:
+                for msg in history:
+                    if isinstance(msg, dict) and "role" in msg and ("parts" in msg or "content" in msg):
+                        content = msg.get("parts", [None])[
+                            0] if "parts" in msg else msg.get("content")
+                        if content:
+                            messages.append({
+                                "role": msg["role"],
+                                "content": content
+                            })
 
             # Добавляем текущее сообщение
             messages.append({
@@ -1147,7 +1152,7 @@ async def setup_handlers(bot):
 
         except Exception as e:
             logging.error(f"Ошибка Mistral API: {e}")
-            await message.answer("Произошла ошибка при генерации ответа. Попробуйте позже.")
+            await message.answer(f"Произошла ошибка при генерации ответа: {str(e)}. Попробуйте позже.")
         except Exception as e:
             logging.error(f"Неожиданная ошибка: {e}")
             await message.answer("Произошла неожиданная ошибка. Попробуйте позже.")
