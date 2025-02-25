@@ -1040,7 +1040,7 @@ async def setup_handlers(bot):
         """Запуск Gemini по команде /gemini"""
         chat_id = message.chat.id
         # Устанавливаем модель по умолчанию
-        model_name = 'gemini-1.5-flash'
+        model_name = 'gemini-2.0-flash-exp'
 
         # Сохраняем модель в состояние
         await state.update_data(model_name=model_name)
@@ -1086,7 +1086,7 @@ async def setup_handlers(bot):
         logger.info(f"Выбранная модель: {model_name}")
 
         if not model_name:
-            model_name = 'gemini-1.5-flash'
+            model_name = 'gemini-2.0-flash-exp'
             logger.warning(
                 f"Модель не найдена в состоянии, используем {model_name}")
 
@@ -1098,23 +1098,31 @@ async def setup_handlers(bot):
         chat_id = message.chat.id
 
         if message.text == '⏹️ Завершить диалог':
+            # Удаляем все диалоги пользователя из локального кэша
+            keys_to_delete = [(cid, ai) for (cid, ai)
+                              in dialog_sessions.keys() if cid == chat_id]
+            for key in keys_to_delete:
+                dialog_sessions.pop(key, None)
+
             await message.answer(
                 "Диалог завершен.",
                 reply_markup=get_ai_selection_keyboard()
             )
-            if chat_id in dialog_sessions:
-                dialog_sessions.pop(chat_id, None)
             await save_user_state(state, 'ai_selection')
             await state.finish()
             return
 
         elif message.text == '⬅️ Назад':
+            # Удаляем все диалоги пользователя из локального кэша
+            keys_to_delete = [(cid, ai) for (cid, ai)
+                              in dialog_sessions.keys() if cid == chat_id]
+            for key in keys_to_delete:
+                dialog_sessions.pop(key, None)
+
             await message.answer(
                 "Возврат в меню выбора AI.",
                 reply_markup=get_ai_selection_keyboard()
             )
-            if chat_id in dialog_sessions:
-                dialog_sessions.pop(chat_id, None)
             await save_user_state(state, 'ai_selection')
             await state.finish()
             return
