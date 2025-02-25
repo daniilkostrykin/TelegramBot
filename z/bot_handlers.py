@@ -199,7 +199,7 @@ async def setup_handlers(bot):
     @dp.message(Command('test'))
     async def test(message: types.Message):
         text = "* Это *не жирный* и не *курсив*, но **это жирный**, а *это курсив*."
-        clean_text = clean_text  # Предполагается, что эта переменная определена где-то выше
+        clean_text = prepare_markdown_text(text)
 
         # Отправляем сообщение без форматирования
         await message.answer(clean_text)
@@ -214,7 +214,7 @@ async def setup_handlers(bot):
         - Экранирует специальные символы
         """
         # Удаляем одиночные * в начале строк
-        text = re.sub(r'^\s*\*\s', '', text, flags=re.MULTILINE)
+        text = re.sub(r'^\s*\*(?!\*)', '', text, flags=re.MULTILINE)
 
         # Экранируем специальные символы
         chars = ['[', ']', '(', ')', '~', '>', '#', '+',
