@@ -16,11 +16,11 @@ import psycopg2
 import json
 import traceback
 from aiogram.fsm.state import State, StatesGroup
-from aiogram import Dispatcher, Bot, types
+from aiogram import Dispatcher, Bot, types, F
 from aiogram.utils import markdown
 from aiogram.fsm.context import FSMContext
+from aiogram.enums import ParseMode
 import asyncio
-from aiogram import F
 from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.filters import BaseFilter
@@ -268,7 +268,7 @@ async def setup_handlers(bot):
                             chunk = close_formatting_tags(chunk)
                             await message.answer(
                                 chunk,
-                                parse_mode=types.ParseMode.MARKDOWN_V2
+                                parse_mode=ParseMode.MARKDOWN_V2
                             )
                             await asyncio.sleep(0.5)  # Асинхронная задержка
                     except Exception as e:
@@ -551,7 +551,7 @@ async def setup_handlers(bot):
             await message.answer("🚫 У вас нет прав для использования этой команды.")
             return
 
-        await message.answer(f"👥 *Состояния пользователей:*\n{user_states}", parse_mode="Markdown")
+        await message.answer(f"👥 *Состояния пользователей:*\n{user_states}", parse_mode=ParseMode.MARKDOWN)
 
     @dp.message(Command('send_keyboard'))
     async def send_keyboard_command(message: types.Message):
@@ -581,7 +581,7 @@ async def setup_handlers(bot):
             for msg in dialog[-5:]:  # Показываем последние 5 сообщений
                 text += f"  - *{msg['role']}*: {msg['content'][:100]}...\n"
 
-        await message.answer(text, parse_mode=types.ParseMode.MARKDOWN_V2)
+        await message.answer(text, parse_mode=ParseMode.MARKDOWN_V2)
 
     @dp.message(Command('active_generations'))
     async def show_active_generations(message: types.Message):
@@ -592,7 +592,7 @@ async def setup_handlers(bot):
 
         await message.answer(
             f"⚙️ *Активные генерации:*\n{active_generations}",
-            parse_mode=types.ParseMode.MARKDOWN_V2
+            parse_mode=ParseMode.MARKDOWN_V2
         )
 
     @dp.message(F.text == '⬅️ Назад')
@@ -605,8 +605,8 @@ async def setup_handlers(bot):
             'g4f_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'ai_selection': ('main_menu', get_main_keyboard(), "Возврат в главное меню."),
             'text_text': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
-            'text_image':('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
-            'text_voice':('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'text_image': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'text_voice': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'nocode': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'gemini_model_selection': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'g4f_model_selection': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
@@ -913,12 +913,12 @@ async def setup_handlers(bot):
             - *Github Copilot* – помощник для программистов.
             
             Выберите модель:""",
-            parse_mode="Markdown",
+            parse_mode=ParseMode.MARKDOWN,
             reply_markup=get_text_text_button()
         )
 
     async def handle_ai_category(message: types.Message, category: str, text: str, keyboard):
-        await message.answer(text, parse_mode="Markdown", reply_markup=keyboard)
+        await message.answer(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
         await save_user_state(message.chat.id, category)
 
     @dp.message(lambda message: message.text == 'Текст-Изображение')
