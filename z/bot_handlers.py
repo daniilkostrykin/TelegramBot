@@ -409,7 +409,6 @@ async def setup_handlers(bot):
     async def save_user_state(state_or_chat_id, new_state: str):
         """
         Сохраняет текущее состояние пользователя.
-
         Args:
             state_or_chat_id: FSMContext объект или chat_id пользователя
             new_state: Новое состояние для сохранения
@@ -420,12 +419,12 @@ async def setup_handlers(bot):
         else:
             # Если передан FSMContext, сохраняем в FSM
             state = state_or_chat_id
-            data = await state.get_data()  # Получаем данные состояния
+            data = await state.get_data()
             if 'states_history' not in data:
                 data['states_history'] = []
             data['states_history'].append(new_state)
             data['current_state'] = new_state
-            await state.update_data(data)  # Обновляем данные состояния
+            await state.update_data(data)
 
             # Также сохраняем в словарь для совместимости
             try:
@@ -597,42 +596,43 @@ async def setup_handlers(bot):
         )
 
     @dp.message(F.text == '⬅️ Назад')
-    async def back(message: types.Message):
+    async def back(message: types.Message, state: FSMContext):
         chat_id = message.chat.id
-        previous_state = get_previous_user_state(message)
+        current_state = user_states.get(chat_id)
 
-        if previous_state == 'ai_selection':
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_ai_selection_keyboard())
-        elif previous_state == 'text_text':
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_text_text_button())
-        elif previous_state == 'text_image':
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_text_image_button())
-        elif previous_state == 'text_voice':
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_text_voice_keyboard())
-        elif previous_state == 'nocode':
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_nocode_keyboard())
-        elif previous_state == 'gemini_model_selection':
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_gemini_model_keyboard())
-        elif previous_state == 'g4f_model_selection':
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_g4f_model_keyboard())
-        elif previous_state == 'appearance':
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_appearance_keyboard())
-        elif previous_state == 'photo':
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_photo_keyboard())
+        state_transitions = {
+            'gemini_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'g4f_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'ai_selection': ('main_menu', get_main_keyboard(), "Возврат в главное меню."),
+            'text_text': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'text_image':('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'text_voice':('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'nocode': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'gemini_model_selection': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'g4f_model_selection': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'appearance': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'photo': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'midjourney_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI.")
+        }
 
+        if current_state in state_transitions:
+            new_state, keyboard, message_text = state_transitions[current_state]
+            await message.answer(message_text, reply_markup=keyboard)
+            await save_user_state(state, new_state)
+            # Очищаем состояние FSM если возвращаемся в главное меню
+            if new_state == 'main_menu':
+                await state.clear()
         else:
-            await message.answer("⬅️ Назад",
-                                 reply_markup=get_main_keyboard())
-            await save_user_state(message.chat.id, 'main_menu')
+            # Если состояние не определено, возвращаемся в главное меню
+            await message.answer("Возврат в главное меню.", reply_markup=get_main_keyboard())
+            await save_user_state(state, 'main_menu')
+            await state.clear()
+
+        # Очищаем историю диалога при возврате
+        if chat_id in dialog_sessions:
+            dialog_sessions.pop(chat_id, None)
+        if chat_id in g4f_dialog_sessions:
+            g4f_dialog_sessions.pop(chat_id, None)
 
     @dp.message(F.text == 'Видео')
     async def handle_video(message: types.Message):
@@ -709,13 +709,21 @@ async def setup_handlers(bot):
 
     @dp.message(F.text.in_(['ChatGPT🌐', 'Gemini', 'G4F (Аналог ChatGPT)', 'Microsoft Copilot🌐', 'Github Copilot🌐']))
     async def handle_ai_choice(message: types.Message, state: FSMContext):
+        chat_id = message.chat.id
+
+        # Очищаем предыдущие состояния и истории диалогов
+        if chat_id in dialog_sessions:
+            dialog_sessions.pop(chat_id, None)
+        if chat_id in g4f_dialog_sessions:
+            g4f_dialog_sessions.pop(chat_id, None)
+        await state.clear()
+
         if message.text == 'Gemini':
             await message.answer(
                 "Вы выбрали Gemini.",
                 reply_markup=get_gemini_model_keyboard()
             )
             await save_user_state(state, 'gemini_model_selection')
-            # ИСПРАВЛЕНО
             await state.set_state(DialogStates.waiting_for_model_selection)
 
         elif message.text == 'G4F (Аналог ChatGPT)':
@@ -765,7 +773,14 @@ async def setup_handlers(bot):
 
     @dp.message(StateFilter(DialogStates.waiting_for_model_selection))
     async def handle_model_selection(message: types.Message, state: FSMContext):
+        chat_id = message.chat.id
         model_name = None
+
+        # Очищаем предыдущие состояния и истории диалогов
+        if chat_id in dialog_sessions:
+            dialog_sessions.pop(chat_id, None)
+        if chat_id in g4f_dialog_sessions:
+            g4f_dialog_sessions.pop(chat_id, None)
 
         # Маппинг моделей
         model_mapping = {
@@ -784,7 +799,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()
             return
 
         model_name = model_mapping.get(message.text)
@@ -793,9 +808,11 @@ async def setup_handlers(bot):
             await message.answer("Неверный выбор модели. Попробуйте снова.")
             return
 
+        # Очищаем предыдущее состояние
+        await state.clear()
+
         # Сохраняем выбранную модель в состояние
-        async with state.proxy() as data:
-            data['model_name'] = model_name
+        await state.update_data(model_name=model_name)
 
         await message.answer(
             f"Вы выбрали: {model_name}. Начните диалог.",
