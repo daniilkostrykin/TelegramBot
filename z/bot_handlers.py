@@ -1099,33 +1099,60 @@ async def setup_handlers(bot):
             logger.warning(
                 f"Модель не найдена в состоянии, используем {model_name}")
 
-        # Проверяем, есть ли изображение в сообщении
-        if message.photo:
+        # Проверяем, есть ли изображения в сообщении
+        if message.photo or message.media_group_id:
             try:
-                # Получаем информацию о файле
-                # Берем последнее (самое качественное) изображение
-                photo = message.photo[-1]
-                file_info = await message.bot.get_file(photo.file_id)
+                images = []
+                temp_files = []
 
-                # Скачиваем файл
-                downloaded_file = await message.bot.download_file(file_info.file_path)
+                if message.media_group_id:
+                    # Получаем все фото из группы
+                    media_group = message.photo
+                    for i, photo in enumerate(media_group):
+                        file_info = await message.bot.get_file(photo.file_id)
+                        downloaded_file = await message.bot.download_file(file_info.file_path)
 
-                # Сохраняем во временный файл
-                with open("temp_image.jpg", "wb") as new_file:
-                    new_file.write(downloaded_file.read())
+                        # Создаем уникальное имя файла для каждого изображения
+                        temp_filename = f"temp_image_{message.chat.id}_{i}.jpg"
+                        temp_files.append(temp_filename)
 
-                # Открываем изображение с помощью PIL
-                img = PIL.Image.open("temp_image.jpg")
+                        with open(temp_filename, "wb") as new_file:
+                            new_file.write(downloaded_file.read())
 
-                # Если есть текст с изображением
-                prompt = message.caption if message.caption else "Опишите это изображение"
+                        img = PIL.Image.open(temp_filename)
+                        images.append(img)
+                else:
+                    # Обработка одиночного изображения
+                    photo = message.photo[-1]
+                    file_info = await message.bot.get_file(photo.file_id)
+                    downloaded_file = await message.bot.download_file(file_info.file_path)
+
+                    temp_filename = f"temp_image_{message.chat.id}_0.jpg"
+                    temp_files.append(temp_filename)
+
+                    with open(temp_filename, "wb") as new_file:
+                        new_file.write(downloaded_file.read())
+
+                    img = PIL.Image.open(temp_filename)
+                    images.append(img)
+
+                # Если есть текст с изображениями
+                prompt = message.caption if message.caption else "Опишите эти изображения"
 
                 # Создаем модель и генерируем ответ
                 model = genai.GenerativeModel(model_name)
-                response = await asyncio.to_thread(model.generate_content, [prompt, img])
 
-                # Удаляем временный файл
-                os.remove("temp_image.jpg")
+                # Формируем запрос с изображениями
+                request = [prompt] + images
+                response = await asyncio.to_thread(model.generate_content, request)
+
+                # Удаляем временные файлы
+                for temp_file in temp_files:
+                    try:
+                        os.remove(temp_file)
+                    except Exception as e:
+                        logger.warning(
+                            f"Не удалось удалить временный файл {temp_file}: {e}")
 
                 # Отправляем ответ
                 await safe_send_message(message, response.text)
@@ -1134,6 +1161,14 @@ async def setup_handlers(bot):
                 logger.error(f"Ошибка при обработке изображения: {e}")
                 await message.answer(f"Произошла ошибка при обработке изображения: {str(e)}")
 
+                # Пытаемся удалить временные файлы в случае ошибки
+                for temp_file in temp_files:
+                    try:
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                    except Exception as e:
+                        logger.warning(
+                            f"Не удалось удалить временный файл {temp_file}: {e}")
         else:
             # Обычная обработка текстового сообщения
             await handle_dialog(message, state, model_name)
