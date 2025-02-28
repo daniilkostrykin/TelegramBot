@@ -224,7 +224,7 @@ async def setup_handlers(bot):
         - Экранирует специальные символы
         """
         # Удаляем одиночные * в начале строк
-        text = re.sub(r'^\s*\*(?!\*)', '', text, flags=re.MULTILINE)
+        text = re.sub(r'^\s*\*(?!\*)', '• ', text, flags=re.MULTILINE)
 
         # Экранируем специальные символы
         chars = ['[', ']', '(', ')', '~', '>', '#', '+',
