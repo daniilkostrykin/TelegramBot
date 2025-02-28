@@ -25,6 +25,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.filters import BaseFilter
 from mistralai import Mistral
 import aiohttp
+import PIL.Image
 
 
 class DialogStates(StatesGroup):
@@ -537,7 +538,6 @@ async def setup_handlers(bot):
 
             # Объединяем старые и новые сообщения
             new_messages = old_messages + [{"role": role, "parts": [content]}]
-
         except Exception as e:
             print(f"[ERROR] Ошибка при сохранении в БД: {e}")
             print(traceback.format_exc())
@@ -1099,7 +1099,44 @@ async def setup_handlers(bot):
             logger.warning(
                 f"Модель не найдена в состоянии, используем {model_name}")
 
-        await handle_dialog(message, state, model_name)
+        # Проверяем, есть ли изображение в сообщении
+        if message.photo:
+            try:
+                # Получаем информацию о файле
+                # Берем последнее (самое качественное) изображение
+                photo = message.photo[-1]
+                file_info = await message.bot.get_file(photo.file_id)
+
+                # Скачиваем файл
+                downloaded_file = await message.bot.download_file(file_info.file_path)
+
+                # Сохраняем во временный файл
+                with open("temp_image.jpg", "wb") as new_file:
+                    new_file.write(downloaded_file.read())
+
+                # Открываем изображение с помощью PIL
+                img = PIL.Image.open("temp_image.jpg")
+
+                # Если есть текст с изображением
+                prompt = message.caption if message.caption else "Опишите это изображение"
+
+                # Создаем модель и генерируем ответ
+                model = genai.GenerativeModel(model_name)
+                response = await asyncio.to_thread(model.generate_content, [prompt, img])
+
+                # Удаляем временный файл
+                os.remove("temp_image.jpg")
+
+                # Отправляем ответ
+                await safe_send_message(message, response.text)
+
+            except Exception as e:
+                logger.error(f"Ошибка при обработке изображения: {e}")
+                await message.answer(f"Произошла ошибка при обработке изображения: {str(e)}")
+
+        else:
+            # Обычная обработка текстового сообщения
+            await handle_dialog(message, state, model_name)
 
     # Обработчик для диалога с Mistral
     @dp.message(StateFilter(DialogStates.waiting_for_mistral_dialog))

@@ -7,3 +7,4 @@ psycopg2==2.9.10
 requests==2.31.0
 python-dateutil==2.9.0.post0
 mistralai
+Pillow==10.2.0
