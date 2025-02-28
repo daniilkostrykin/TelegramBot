@@ -267,23 +267,34 @@ async def setup_handlers(bot):
             # Разделяем текст на части с кодом и без
             parts = process_code_block(text)
 
+            current_message = ""
+
             for content, is_code in parts:
                 if not content.strip():
                     continue
 
                 if is_code:
-                    # Отправляем код без форматирования
+                    # Если накопился обычный текст, отправляем его
+                    if current_message:
+                        await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                        current_message = ""
+                    # Отправляем блок кода отдельно
                     await message.answer(f"```\n{content}\n```", parse_mode=ParseMode.MARKDOWN_V2)
                 else:
                     # Форматируем обычный текст
                     formatted_text = prepare_markdown_text(content)
 
-                    # Разбиваем на части если текст длинный
-                    for i in range(0, len(formatted_text), MAX_LENGTH):
-                        chunk = formatted_text[i:i + MAX_LENGTH]
-                        await message.answer(chunk, parse_mode=ParseMode.MARKDOWN_V2)
+                    # Добавляем текст к текущему сообщению
+                    if len(current_message) + len(formatted_text) > MAX_LENGTH:
+                        # Если превышен лимит, отправляем накопленное и начинаем новое
+                        await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                        current_message = formatted_text
+                    else:
+                        current_message += formatted_text
 
-                await asyncio.sleep(0.5)
+            # Отправляем оставшийся текст
+            if current_message:
+                await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
 
         except Exception as e:
             print(f"Ошибка форматирования: {e}")
