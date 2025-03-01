@@ -206,67 +206,70 @@ async def setup_handlers(bot):
             logger.error(f"Error in start command: {e}")
             await message.answer('Произошла ошибка')
 
-    @dp.message(Command('test'))
-    async def test(message: types.Message):
-        text = "* Это *не жирный* и не *курсив*, но **это жирный**, а *это курсив*."
-        clean_text = prepare_markdown_text(text)
-
-        # Отправляем сообщение без форматирования
-        await message.answer(clean_text)
-
-        # Отправляем сообщение с HTML форматированием
-        await message.answer(clean_text, parse_mode=types.ParseMode.HTML)
-
-    def prepare_markdown_text(text: str) -> str:
-        """
-        Подготавливает текст для корректного отображения в Markdown V2.
-        - Удаляет одиночные * в начале строк
-        - Экранирует специальные символы
-        """
-        # Удаляем одиночные * в начале строк
-        text = re.sub(r'^\s*\*(?!\*)', '• ', text, flags=re.MULTILINE)
-
-        # Экранируем специальные символы
-        chars = ['[', ']', '(', ')', '~', '>', '#', '+',
-                 '-', '=', '|', '{', '}', '.', '!', '_']
-        for char in chars:
-            text = text.replace(char, f'\\{char}')
-
-        return text
-
     def process_code_block(text: str) -> list:
         """
         Разделяет текст на обычный текст и блоки кода.
         Возвращает список кортежей (текст, is_code).
         """
         parts = []
-        current_text = ""
-
-        # Находим все блоки кода
         pattern = r'```(?:python)?\n([\s\S]*?)```'
         last_end = 0
 
         for match in re.finditer(pattern, text):
-            # Добавляем текст до блока кода
             if match.start() > last_end:
                 parts.append((text[last_end:match.start()], False))
 
-            # Добавляем сам блок кода
             parts.append((match.group(1), True))
             last_end = match.end()
 
-        # Добавляем оставшийся текст
         if last_end < len(text):
             parts.append((text[last_end:], False))
 
         return parts if parts else [(text, False)]
 
+    def to_markdown(text: str) -> str:
+        """
+        Преобразует текст в формат Markdown для Telegram.
+        """
+        bold_texts = []
+
+        def save_bold(match):
+            inner_text = match.group(1)
+            inner_text = re.sub(r'\*([^*]+)\*', r'*\1*', inner_text)
+            bold_texts.append(inner_text)
+            return f"§BOLD{len(bold_texts)-1}§"
+
+        math_exprs = []
+
+        def save_math(match):
+            math_exprs.append(match.group(0))
+            return f"§MATH{len(math_exprs)-1}§"
+
+        text = re.sub(r'\*\*(.*?)\*\*', save_bold, text, flags=re.DOTALL)
+        text = re.sub(r'\d+\s*\*\s*\d+', save_math, text)
+
+        text = re.sub(r'<sup>([^<]+)</sup>', r'^\1', text)
+        text = re.sub(r'<sub>([^<]+)</sub>', r'_\1', text)
+        text = re.sub(r'^\s*\*\s+', '• ', text, flags=re.MULTILINE)
+
+        special_chars = '_*[]()~`>#+-=|{}.!\\'
+        escaped_text = ''.join(f'\\{char}' if char in special_chars else char for char in text)
+        text = escaped_text
+
+        for i, bold_text in enumerate(bold_texts):
+            escaped_bold = ''.join(f'\\{char}' if char in special_chars and char != '*' else char for char in bold_text)
+            text = text.replace(f"§BOLD{i}§", f"*{escaped_bold}*")
+
+        for i, math_expr in enumerate(math_exprs):
+            escaped_expr = ''.join(f'\\{char}' if char in special_chars else char for char in math_expr)
+            text = text.replace(f"§MATH{i}§", escaped_expr)
+
+        return text
+
     async def safe_send_message(message: types.Message, text: str):
         MAX_LENGTH = 4000
         try:
-            # Разделяем текст на части с кодом и без
             parts = process_code_block(text)
-
             current_message = ""
 
             for content, is_code in parts:
@@ -274,32 +277,27 @@ async def setup_handlers(bot):
                     continue
 
                 if is_code:
-                    # Если накопился обычный текст, отправляем его
                     if current_message:
                         await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
                         current_message = ""
-                    # Отправляем блок кода отдельно
+
                     await message.answer(f"```\n{content}\n```", parse_mode=ParseMode.MARKDOWN_V2)
                 else:
-                    # Форматируем обычный текст
-                    formatted_text = prepare_markdown_text(content)
+                    formatted_text = to_markdown(content)
 
-                    # Добавляем текст к текущему сообщению
                     if len(current_message) + len(formatted_text) > MAX_LENGTH:
-                        # Если превышен лимит, отправляем накопленное и начинаем новое
                         await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
                         current_message = formatted_text
                     else:
                         current_message += formatted_text
 
-            # Отправляем оставшийся текст
             if current_message:
                 await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
 
         except Exception as e:
             print(f"Ошибка форматирования: {e}")
-            # Если все попытки форматирования не удались, отправляем текст как есть
             await message.answer(text)
+
 
     async def handle_dialog(message: types.Message, state: FSMContext, model_name: str, test_query: str = None):
         chat_id = message.chat.id
