@@ -206,6 +206,7 @@ async def setup_handlers(bot):
             logger.error(f"Error in start command: {e}")
             await message.answer('Произошла ошибка')
 
+
     def process_code_block(text: str) -> list:
         """
         Разделяет текст на обычный текст и блоки кода.
@@ -227,6 +228,7 @@ async def setup_handlers(bot):
 
         return parts if parts else [(text, False)]
 
+
     def to_markdown(text: str) -> str:
         """
         Преобразует текст в формат Markdown для Telegram.
@@ -236,7 +238,6 @@ async def setup_handlers(bot):
 
         def save_bold(match):
             inner_text = match.group(1)
-            inner_text = re.sub(r'\*([^*]+)\*', r'*\1*', inner_text)
             bold_texts.append(inner_text)
             return f"§BOLD{len(bold_texts)-1}§"
 
@@ -246,51 +247,57 @@ async def setup_handlers(bot):
             math_exprs.append(match.group(0))
             return f"§MATH{len(math_exprs)-1}§"
 
-        # Обрабатываем строки с кодом внутри жирного текста, чтобы они не стали жирными
-        def save_code_in_bold(match):
-            code = match.group(1)
-            return f"§CODE{len(bold_texts)}§"
+        # Сначала сохраняем математические выражения
+        # Сохраняем сложные математические выражения с последовательными умножениями
+        text = re.sub(
+            r'(?:\d+(?:/\d+)?|\(\d+(?:/\d+)?\))(?:\s*\*\s*(?:\d+(?:/\d+)?|\(\d+(?:/\d+)?\)))+', save_math, text)
+        # Сохраняем простые умножения вида 2 * 3
+        text = re.sub(r'\d+\s*\*\s*\d+', save_math, text)
+        # Сохраняем степени вида ^6
+        text = re.sub(r'\^[0-9]+', save_math, text)
 
-        # Сначала находим строки с кодом в жирном тексте и меняем их на метки
-        text = re.sub(r'\*\*`(.*?)`\*\*', save_code_in_bold, text)
+        # Сохраняем маркеры списка, заменяя их временно
+        text = re.sub(r'^(\s*)\*(\s+)', r'\1§LIST§\2', text, flags=re.MULTILINE)
 
-        # Обрабатываем жирный текст
+        # Обрабатываем двойные звездочки (обычный жирный текст)
         text = re.sub(r'\*\*(.*?)\*\*', save_bold, text, flags=re.DOTALL)
 
-        # Заменяем математические выражения
-        text = re.sub(r'\d+\s*\*\s*\d+', save_math, text)
+        # Обрабатываем одиночные звездочки (если это не маркер списка)
+        text = re.sub(r'\*([^*\n]+)\*', save_bold, text)
+
+        # Возвращаем маркеры списка
+        text = text.replace('§LIST§', '*')
 
         # Заменяем HTML-теги
         text = re.sub(r'<sup>([^<]+)</sup>', r'^\1', text)
         text = re.sub(r'<sub>([^<]+)</sub>', r'_\1', text)
 
-        # Заменяем маркеры списка
+        # Заменяем маркеры списка на буллеты
         text = re.sub(r'^\s*\*\s+', '• ', text, flags=re.MULTILINE)
 
         # Экранируем специальные символы Markdown
         special_chars = '_*[]()~>#+-=|{}.!\\'
-        escaped_text = ''.join(f'\\{char}' if char in special_chars else char for char in text)
+        escaped_text = ''.join(
+            f'\\{char}' if char in special_chars else char for char in text)
         text = escaped_text
 
-        # Вставляем назад кодовые элементы, чтобы они не были жирными
+        # Вставляем назад жирный текст
         for i, bold_text in enumerate(bold_texts):
-            escaped_bold = ''.join(f'\\{char}' if char in special_chars and char != '*' else char for char in bold_text)
+            escaped_bold = ''.join(
+                f'\\{char}' if char in special_chars and char != '*' else char for char in bold_text)
             text = text.replace(f"§BOLD{i}§", f"*{escaped_bold}*")
 
         # Вставляем назад математические выражения
         for i, math_expr in enumerate(math_exprs):
-            escaped_expr = ''.join(f'\\{char}' if char in special_chars else char for char in math_expr)
+            escaped_expr = ''.join(
+                f'\\{char}' if char in special_chars else char for char in math_expr)
             text = text.replace(f"§MATH{i}§", escaped_expr)
-
-        # Вставляем метки для кода обратно
-        for i, _ in enumerate(bold_texts):
-            text = text.replace(f"§CODE{i}§", f"`{bold_texts[i]}`")
 
         return text
 
 
     async def safe_send_message(message: types.Message, text: str):
-        MAX_LENGTH = 4000
+        MAX_LENGTH = 3500
         try:
             parts = process_code_block(text)
             current_message = ""
@@ -320,6 +327,8 @@ async def setup_handlers(bot):
         except Exception as e:
             print(f"Ошибка форматирования: {e}")
             await message.answer(text)
+
+
 
 
     async def handle_dialog(message: types.Message, state: FSMContext, model_name: str, test_query: str = None):
