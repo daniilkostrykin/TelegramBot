@@ -135,7 +135,11 @@ async def safe_send_message(message: types.Message, text: str):
                     await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
                     current_message = ""
 
-                await message.answer(f"```\n{content}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                # Разбиваем длинный код на части
+                code_parts = [content[i:i + MAX_LENGTH]
+                              for i in range(0, len(content), MAX_LENGTH)]
+                for code_part in code_parts:
+                    await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
             else:
                 formatted_text = to_markdown(content)
 
@@ -150,7 +154,11 @@ async def safe_send_message(message: types.Message, text: str):
 
     except Exception as e:
         print(f"Ошибка форматирования: {e}")
-        await message.answer(text)
+        # Если произошла ошибка форматирования, разбиваем текст на части и отправляем без форматирования
+        text_parts = [text[i:i + MAX_LENGTH]
+                      for i in range(0, len(text), MAX_LENGTH)]
+        for part in text_parts:
+            await message.answer(part)
 
 
 async def test_safe_send_message():
@@ -244,7 +252,115 @@ async def test_safe_send_message():
 
  """
     ]
-    text = ["Математические выражения: (1/6) * (1/6) * (1/6) * (1/6) * (1/6) * (1/6) = (1/6)^6 = 1/46656",
+    text = ["""Вот несколько примеров рандомайзеров на разных языках программирования:
+
+ 
+
+**Python:**
+
+ 
+
+```python
+
+import random
+
+ 
+
+def random_number(min_value, max_value):
+
+
+
+  Возвращает случайное целое число в диапазоне [min_value, max_value] включительно.
+
+
+
+  return random.randint(min_value, max_value)
+
+ 
+
+def random_choice(options):
+
+
+  Возвращает случайный элемент из списка.
+
+
+  return random.choice(options)
+
+ 
+
+def shuffle_list(my_list):
+
+
+
+  Перемешивает список случайным образом на месте.
+
+
+  random.shuffle(my_list)
+
+  return my_list # Возвращает перемешанный список для удобства, но он уже изменен
+
+ 
+
+# Пример использования:
+
+print("Случайное число между 1 и 10:", random_number(1, 10))
+
+ 
+
+colors = ["красный", "синий", "зеленый"]
+
+print("Случайный цвет:", random_choice(colors))
+
+ 
+
+numbers = [1, 2, 3, 4, 5]
+
+print("Перемешанный список:", shuffle_list(numbers))
+
+```
+
+ 
+
+**JavaScript:**
+
+ 
+
+```javascript
+
+function randomNumber(minValue, maxValue) {
+
+  /**
+
+   * Возвращает случайное целое число в диапазоне [minValue, maxValue] включительно.
+
+   */
+
+  return Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue;
+
+}
+
+ 
+
+function randomChoice(options) {
+
+  /**
+
+   * Возвращает случайный элемент из массива.
+
+   */
+
+  const randomIndex = Math.floor(Math.random() * options.length);
+
+  return options[randomIndex];
+
+}
+
+ 
+
+function shuffleArray(array) {
+
+  /** ```
+""","Математические выражения: (1/6) * (1/6) * (1/6) * (1/6) * (1/6) * (1/6) = (1/6)^6 = 1/46656",
 
             "Разные варианты умножения:\n2 * 3 = 6\n(1/2) * 4 = 2\n(3/4) * (2/3) = 1/2", """Вероятность того, что 6 выпадет 6 раз подряд при броске игральной кости, равна:
 (1/6) * (1/6) * (1/6) * (1/6) * (1/6) * (1/6) = (1/6)<sup>6</sup> = 1/46656

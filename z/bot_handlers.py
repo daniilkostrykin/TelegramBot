@@ -311,7 +311,11 @@ async def setup_handlers(bot):
                         await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
                         current_message = ""
 
-                    await message.answer(f"```\n{content}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                    # Разбиваем длинный код на части
+                    code_parts = [content[i:i + MAX_LENGTH]
+                                for i in range(0, len(content), MAX_LENGTH)]
+                    for code_part in code_parts:
+                        await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
                 else:
                     formatted_text = to_markdown(content)
 
@@ -326,7 +330,13 @@ async def setup_handlers(bot):
 
         except Exception as e:
             print(f"Ошибка форматирования: {e}")
-            await message.answer(text)
+            # Если произошла ошибка форматирования, разбиваем текст на части и отправляем без форматирования
+            text_parts = [text[i:i + MAX_LENGTH]
+                        for i in range(0, len(text), MAX_LENGTH)]
+            for part in text_parts:
+                await message.answer(part)
+
+
 
 
 
