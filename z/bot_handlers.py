@@ -268,7 +268,7 @@ async def setup_handlers(bot):
         text = re.sub(r'^\s*\*\s+', '• ', text, flags=re.MULTILINE)
 
         # Экранируем специальные символы Markdown
-        special_chars = '_*[]()~`>#+-=|{}.!\\'
+        special_chars = '_*[]()~>#+-=|{}.!\\'
         escaped_text = ''.join(f'\\{char}' if char in special_chars else char for char in text)
         text = escaped_text
 
