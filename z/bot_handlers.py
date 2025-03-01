@@ -230,6 +230,7 @@ async def setup_handlers(bot):
     def to_markdown(text: str) -> str:
         """
         Преобразует текст в формат Markdown для Telegram.
+        Обрабатывает жирный текст, код и другие элементы.
         """
         bold_texts = []
 
@@ -245,26 +246,48 @@ async def setup_handlers(bot):
             math_exprs.append(match.group(0))
             return f"§MATH{len(math_exprs)-1}§"
 
+        # Обрабатываем строки с кодом внутри жирного текста, чтобы они не стали жирными
+        def save_code_in_bold(match):
+            code = match.group(1)
+            return f"§CODE{len(bold_texts)}§"
+
+        # Сначала находим строки с кодом в жирном тексте и меняем их на метки
+        text = re.sub(r'\*\*`(.*?)`\*\*', save_code_in_bold, text)
+
+        # Обрабатываем жирный текст
         text = re.sub(r'\*\*(.*?)\*\*', save_bold, text, flags=re.DOTALL)
+
+        # Заменяем математические выражения
         text = re.sub(r'\d+\s*\*\s*\d+', save_math, text)
 
+        # Заменяем HTML-теги
         text = re.sub(r'<sup>([^<]+)</sup>', r'^\1', text)
         text = re.sub(r'<sub>([^<]+)</sub>', r'_\1', text)
+
+        # Заменяем маркеры списка
         text = re.sub(r'^\s*\*\s+', '• ', text, flags=re.MULTILINE)
 
+        # Экранируем специальные символы Markdown
         special_chars = '_*[]()~`>#+-=|{}.!\\'
         escaped_text = ''.join(f'\\{char}' if char in special_chars else char for char in text)
         text = escaped_text
 
+        # Вставляем назад кодовые элементы, чтобы они не были жирными
         for i, bold_text in enumerate(bold_texts):
             escaped_bold = ''.join(f'\\{char}' if char in special_chars and char != '*' else char for char in bold_text)
             text = text.replace(f"§BOLD{i}§", f"*{escaped_bold}*")
 
+        # Вставляем назад математические выражения
         for i, math_expr in enumerate(math_exprs):
             escaped_expr = ''.join(f'\\{char}' if char in special_chars else char for char in math_expr)
             text = text.replace(f"§MATH{i}§", escaped_expr)
 
+        # Вставляем метки для кода обратно
+        for i, _ in enumerate(bold_texts):
+            text = text.replace(f"§CODE{i}§", f"`{bold_texts[i]}`")
+
         return text
+
 
     async def safe_send_message(message: types.Message, text: str):
         MAX_LENGTH = 4000
