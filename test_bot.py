@@ -132,25 +132,68 @@ async def safe_send_message(message: types.Message, text: str):
 
             if is_code:
                 if current_message:
-                    await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                    try:
+                        await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                    except Exception as e:
+                        if "can't parse entities: Can't find end of Bold" in str(e):
+                            # Если ошибка связана с незакрытым жирным текстом, добавляем закрывающую звездочку
+                            fixed_text = current_message
+                            # Если нечетное количество звездочек
+                            if fixed_text.count('*') % 2 != 0:
+                                fixed_text += '*'
+                            await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
+                        else:
+                            await message.answer(current_message)
                     current_message = ""
 
                 # Разбиваем длинный код на части
                 code_parts = [content[i:i + MAX_LENGTH]
                               for i in range(0, len(content), MAX_LENGTH)]
                 for code_part in code_parts:
-                    await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                    try:
+                        await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                    except Exception as e:
+                        if "can't parse entities: Can't find end of PreCode entity" in str(e):
+                            # Если ошибка связана с незакрытым блоком кода, добавляем закрывающие символы
+                            fixed_code = code_part
+                            if not fixed_code.endswith('\n'):
+                                fixed_code += '\n'
+                            await message.answer(f"```\n{fixed_code}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                        else:
+                            await message.answer(code_part)
             else:
                 formatted_text = to_markdown(content)
 
                 if len(current_message) + len(formatted_text) > MAX_LENGTH:
-                    await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                    try:
+                        await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                    except Exception as e:
+                        if "can't parse entities: Can't find end of Bold" in str(e):
+                            # Если ошибка связана с незакрытым жирным текстом, добавляем закрывающую звездочку
+                            fixed_text = current_message
+                            # Если нечетное количество звездочек
+                            if fixed_text.count('*') % 2 != 0:
+                                fixed_text += '*'
+                            await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
+                        else:
+                            await message.answer(current_message)
                     current_message = formatted_text
                 else:
                     current_message += formatted_text
 
         if current_message:
-            await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+            try:
+                await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+            except Exception as e:
+                if "can't parse entities: Can't find end of Bold" in str(e):
+                    # Если ошибка связана с незакрытым жирным текстом, добавляем закрывающую звездочку
+                    fixed_text = current_message
+                    # Если нечетное количество звездочек
+                    if fixed_text.count('*') % 2 != 0:
+                        fixed_text += '*'
+                    await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
+                else:
+                    await message.answer(current_message)
 
     except Exception as e:
         print(f"Ошибка форматирования: {e}")
@@ -360,7 +403,7 @@ function randomChoice(options) {
 function shuffleArray(array) {
 
   /** ```
-""","Математические выражения: (1/6) * (1/6) * (1/6) * (1/6) * (1/6) * (1/6) = (1/6)^6 = 1/46656",
+""", "Математические выражения: (1/6) * (1/6) * (1/6) * (1/6) * (1/6) * (1/6) = (1/6)^6 = 1/46656",
 
             "Разные варианты умножения:\n2 * 3 = 6\n(1/2) * 4 = 2\n(3/4) * (2/3) = 1/2", """Вероятность того, что 6 выпадет 6 раз подряд при броске игральной кости, равна:
 (1/6) * (1/6) * (1/6) * (1/6) * (1/6) * (1/6) = (1/6)<sup>6</sup> = 1/46656
