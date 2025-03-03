@@ -27,6 +27,12 @@ from mistralai import Mistral
 import aiohttp
 import PIL.Image
 
+# Константы для Qwen
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+API_URL = "https://api.together.xyz/inference"
+
+# Функция для получения ответа от Qwen
+
 
 class DialogStates(StatesGroup):
     waiting_for_dialog = State()
@@ -41,6 +47,7 @@ class DialogStates(StatesGroup):
     waiting_for_appearance = State()
     waiting_for_photo = State()
     waiting_for_midjourney = State()
+    waiting_for_qwen_dialog = State()
 
 
 # DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:XgFOPaWGkymuYpcXKkuSJwIlcPihcHKI@autorack.proxy.rlwy.net:36255/railway")
@@ -206,7 +213,6 @@ async def setup_handlers(bot):
             logger.error(f"Error in start command: {e}")
             await message.answer('Произошла ошибка')
 
-
     def process_code_block(text: str) -> list:
         """
         Разделяет текст на обычный текст и блоки кода.
@@ -227,7 +233,6 @@ async def setup_handlers(bot):
             parts.append((text[last_end:], False))
 
         return parts if parts else [(text, False)]
-
 
     def to_markdown(text: str) -> str:
         """
@@ -257,7 +262,8 @@ async def setup_handlers(bot):
         text = re.sub(r'\^[0-9]+', save_math, text)
 
         # Сохраняем маркеры списка, заменяя их временно
-        text = re.sub(r'^(\s*)\*(\s+)', r'\1§LIST§\2', text, flags=re.MULTILINE)
+        text = re.sub(r'^(\s*)\*(\s+)', r'\1§LIST§\2',
+                      text, flags=re.MULTILINE)
 
         # Обрабатываем двойные звездочки (обычный жирный текст)
         text = re.sub(r'\*\*(.*?)\*\*', save_bold, text, flags=re.DOTALL)
@@ -295,7 +301,6 @@ async def setup_handlers(bot):
 
         return text
 
-
     async def safe_send_message(message: types.Message, text: str):
         MAX_LENGTH = 3500
         try:
@@ -324,7 +329,7 @@ async def setup_handlers(bot):
 
                     # Разбиваем длинный код на части
                     code_parts = [content[i:i + MAX_LENGTH]
-                                for i in range(0, len(content), MAX_LENGTH)]
+                                  for i in range(0, len(content), MAX_LENGTH)]
                     for code_part in code_parts:
                         try:
                             await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
@@ -375,12 +380,9 @@ async def setup_handlers(bot):
             print(f"Ошибка форматирования: {e}")
             # Если произошла ошибка форматирования, разбиваем текст на части и отправляем без форматирования
             text_parts = [text[i:i + MAX_LENGTH]
-                        for i in range(0, len(text), MAX_LENGTH)]
+                          for i in range(0, len(text), MAX_LENGTH)]
             for part in text_parts:
                 await message.answer(part)
-
-
-
 
     async def handle_dialog(message: types.Message, state: FSMContext, model_name: str, test_query: str = None):
         chat_id = message.chat.id
@@ -844,7 +846,7 @@ async def setup_handlers(bot):
         )
         await save_user_state(message.chat.id, 'ai_selection')
 
-    @dp.message(F.text.in_(['ChatGPT🌐', 'Gemini', 'G4F (Аналог ChatGPT)', 'Microsoft Copilot🌐', 'Github Copilot🌐', 'Mistral AI']))
+    @dp.message(F.text.in_(['ChatGPT', 'Gemini', 'G4F (Аналог ChatGPT)', 'Microsoft Copilot', 'Github Copilot', 'Mistral AI', 'Qwen']))
     async def handle_ai_choice(message: types.Message, state: FSMContext):
         chat_id = message.chat.id
 
@@ -878,6 +880,14 @@ async def setup_handlers(bot):
             )
             await save_user_state(state, 'mistral_model_selection')
             await state.set_state(DialogStates.waiting_for_mistral_model)
+
+        elif message.text == 'Qwen':
+            dialog_sessions[chat_id] = []
+            await message.answer(
+                "Начинаю диалог с Qwen. Отправьте ваше сообщение.",
+                reply_markup=get_dialog_keyboard()
+            )
+            await state.set_state(DialogStates.waiting_for_qwen_dialog)
 
         elif message.text == '⬅️ Назад':
             await message.answer(
@@ -1598,6 +1608,142 @@ async def setup_handlers(bot):
             stop_event.set()
             loading_thread.join()
             await message.answer(f"Произошла ошибка при генерации изображения: {str(e)}")
+
+    def get_qwen_response_stream(messages):
+        if not TOGETHER_API_KEY:
+            raise ValueError("TOGETHER_API_KEY не настроен в .env файле")
+
+        headers = {
+            "Authorization": f"Bearer {TOGETHER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "model": "Qwen/Qwen2.5-72B-Instruct-Turbo",
+            "messages": messages,
+            "stream": True
+        }
+
+        try:
+            response = requests.post(
+                API_URL, headers=headers, json=data, stream=True)
+
+            if response.status_code != 200:
+                print(
+                    f"Error: {response.status_code}, Response: {response.text}")
+                yield None
+                return
+
+            for line in response.iter_lines():
+                if line:
+                    decoded_line = line.decode('utf-8').strip()
+                    # Выводим сырые данные API
+                    print(f"[DEBUG] raw line: {decoded_line}")
+
+                    if decoded_line.startswith('data: '):
+                        json_data = decoded_line[len('data: '):].strip()
+                        if json_data == '[DONE]':
+                            break
+                        try:
+                            chunk = json.loads(json_data)
+                            # Показываем, что в JSON
+                            print(f"[DEBUG] parsed JSON: {chunk}")
+
+                            if 'choices' in chunk and chunk['choices']:
+                                content = chunk['choices'][0].get(
+                                    'text', '')  # Исправлено!
+                                if content:
+                                    yield content
+                        except json.JSONDecodeError:
+                            print(
+                                f"[ERROR] Ошибка декодирования JSON: {json_data}")
+                            continue
+
+        except Exception as e:
+            print(f"Error in get_qwen_response_stream: {e}")
+            raise
+
+    @dp.message(Command('qwen'))
+    async def handle_qwen_command(message: types.Message, state: FSMContext):
+        """Обработчик команды /qwen"""
+        chat_id = message.chat.id
+        dialog_sessions[chat_id] = []
+
+        await message.answer(
+            "Начинаю диалог с Qwen. Отправьте ваше сообщение.",
+            reply_markup=get_dialog_keyboard()
+        )
+        await state.set_state(DialogStates.waiting_for_qwen_dialog)
+
+    @dp.message(StateFilter(DialogStates.waiting_for_qwen_dialog))
+    async def handle_qwen_dialog(message: types.Message, state: FSMContext):
+        """Обработчик диалога с Qwen"""
+        chat_id = message.chat.id
+
+        if message.text == '⏹️ Завершить диалог':
+            await message.answer(
+                "Диалог завершен.",
+                reply_markup=get_ai_selection_keyboard()
+            )
+            if chat_id in dialog_sessions:
+                del dialog_sessions[chat_id]
+            await state.clear()
+            return
+
+        sent_message = await message.answer("Генерация ответа...")
+        response_text = ""
+
+        try:
+            # Сохраняем сообщение пользователя
+            await save_dialog_message(chat_id, "qwen", "user", message.text)
+            print(f"[LOG] Сообщение пользователя сохранено: {message.text}")
+
+            # Получаем историю диалога
+            messages = dialog_sessions.get(chat_id, [])
+            messages.append({"role": "user", "content": message.text})
+            print(f"[LOG] История диалога: {messages}")
+
+            # Таймер для обновления сообщений
+            last_update_time = asyncio.get_event_loop().time()
+
+            for chunk in get_qwen_response_stream(messages):
+                if chunk:
+                    response_text += chunk
+
+                    # Обновляем сообщение каждые 2 секунды
+                    if asyncio.get_event_loop().time() - last_update_time > 2:
+                        try:
+                            await sent_message.edit_text(f"Генерация ответа...\n\n{response_text[-500:]}")
+                        except Exception:
+                            pass  # Иногда API Telegram не дает обновлять сообщение слишком часто
+                        last_update_time = asyncio.get_event_loop().time()
+
+            if not response_text.strip():
+                print("[ERROR] Получен пустой ответ от API")
+                await message.answer("Получен пустой ответ от API. Попробуйте еще раз.")
+                await sent_message.delete()
+                return
+
+            # Сохраняем ответ модели
+            await save_dialog_message(chat_id, "qwen", "assistant", response_text)
+            print(f"[LOG] Ответ модели сохранен: {response_text[:100]}...")
+
+            # Обновляем историю диалога
+            messages.append({"role": "assistant", "content": response_text})
+            dialog_sessions[chat_id] = messages
+
+            # Отправляем ответ пользователю
+            await sent_message.delete()
+            await safe_send_message(message, response_text)
+
+        except Exception as e:
+            print(f"[ERROR] Ошибка в диалоге Qwen: {e}")
+            await message.answer(
+                "Произошла ошибка при обработке запроса. Попробуйте позже.",
+                reply_markup=get_dialog_keyboard()
+            )
+            if sent_message:
+                await sent_message.delete()
 
 
 class UserStateFilter(BaseFilter):

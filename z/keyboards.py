@@ -49,15 +49,14 @@ def get_text_text_button():
         [KeyboardButton(text="ChatGPT🌐", web_app=WebAppInfo(url="https://chatgpt.com/")),
          KeyboardButton(text="Gemini")],
         [KeyboardButton(text="G4F (Аналог ChatGPT)"),
-         KeyboardButton(text="Mistral AI")],
+         KeyboardButton(text="Mistral AI"), KeyboardButton(text="Qwen")],
         [KeyboardButton(text="Microsoft Copilot🌐", web_app=WebAppInfo(
             url="https://copilot.microsoft.com/"))],
         [KeyboardButton(text="Github Copilot🌐", web_app=WebAppInfo(
             url="https://github.com/copilot"))],
         [KeyboardButton(text="⬅️ Назад")]
     ]
-    markup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
-    return markup
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
 def get_text_image_button():
