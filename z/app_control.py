@@ -4,6 +4,7 @@ import webbrowser
 from fuzzywuzzy import process
 from z.config import POPULAR_SITES, TRANSLATIONS
 
+
 def get_closest_app(query):
     closest_match, score = process.extractOne(query, TRANSLATIONS.keys())
     if score > 60:
