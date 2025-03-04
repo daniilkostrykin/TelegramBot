@@ -5,7 +5,7 @@ import time
 import requests
 import logging
 import os
-from z.config import ADMIN_ID, POPULAR_SITES, GEMINI_API_KEY, BOT_TOKEN, MISTRAL_API_KEY
+from z.config import ADMIN_ID, POPULAR_SITES, GEMINI_API_KEY, BOT_TOKEN, MISTRAL_API_KEY, TOGETHER_API_KEY
 import google.generativeai as genai
 from g4f.client import Client
 from deep_translator import GoogleTranslator
@@ -28,7 +28,6 @@ import aiohttp
 import PIL.Image
 
 # Константы для Qwen
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 API_URL = "https://api.together.xyz/inference"
 
 # Функция для получения ответа от Qwen
