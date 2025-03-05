@@ -54,7 +54,7 @@ class DialogStates(StatesGroup):
 DATABASE_URL = os.environ.get("DB_URL")
 if not DATABASE_URL:
     print("Ошибка: Не найдена переменная окружения DB_URL из системы.  Убедитесь, что она установлена.")
-    DATABASE_URL = "postgresql://postgres:UxAgpKnoEDeQGLsAODlFNlVOirCaoCIa@gondola.proxy.rlwy.net:54556/railway"
+    DATABASE_URL = "postgresql://postgres:QAUOzYdRBViliseBgLeEjfXxdrwFmtEZ@postgres.railway.internal:5432/railway"
 
 # Инициализируем диспетчер с хранилищем состояний
 dp = Dispatcher(storage=MemoryStorage())
