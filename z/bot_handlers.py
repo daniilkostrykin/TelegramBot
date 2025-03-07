@@ -14,7 +14,6 @@ from z.keyboards import *
 import psycopg2
 import json
 import traceback
-from aiogram.fsm.state import State, StatesGroup
 from aiogram import Dispatcher, Bot, types, F
 from aiogram.utils import markdown
 from aiogram.fsm.context import FSMContext
@@ -22,40 +21,22 @@ from aiogram.enums import ParseMode
 import asyncio
 from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.filters import BaseFilter
 from mistralai import Mistral
 import aiohttp
 import PIL.Image
+from src.models import DialogStates, UserStateFilter
 
 # Константы для Qwen
 API_URL = "https://api.together.xyz/inference"
-
-# Функция для получения ответа от Qwen
-
-
-class DialogStates(StatesGroup):
-    waiting_for_dialog = State()
-    waiting_for_g4f_dialog = State()
-    waiting_for_model_selection = State()
-    waiting_for_g4f_model = State()
-    waiting_for_mistral_dialog = State()
-    waiting_for_mistral_model = State()
-    waiting_for_text_image = State()
-    waiting_for_text_voice = State()
-    waiting_for_nocode = State()
-    waiting_for_appearance = State()
-    waiting_for_photo = State()
-    waiting_for_midjourney = State()
-    waiting_for_qwen_dialog = State()
-
 
 # DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:XgFOPaWGkymuYpcXKkuSJwIlcPihcHKI@autorack.proxy.rlwy.net:36255/railway")
 # Получаем URL базы данных из переменной окружения
 DATABASE_URL = os.environ.get("DB_URL")
 if not DATABASE_URL:
     print("Ошибка: Не найдена переменная окружения DB_URL из системы.  Убедитесь, что она установлена.")
-    DATABASE_URL = "postgresql://postgres:QAUOzYdRBViliseBgLeEjfXxdrwFmtEZ@postgres.railway.internal:5432/railway"
-    #DATABASE_URL = "postgresql://daniil:liinad@localhost:5432/tgbot"
+    # DATABASE_URL = "postgresql://postgres:QAUOzYdRBViliseBgLeEjfXxdrwFmtEZ@gondola.proxy.rlwy.net:43252/railway"
+    DATABASE_URL = "postgresql://postgres:tocutLkkpvyyDLmYnEPZrrovLcTbjFvA@postgres.railway.internal:5432/railway"
+    # DATABASE_URL = "postgresql://daniil:liinad@localhost:5432/tgbot"
 
 # Инициализируем диспетчер с хранилищем состояний
 dp = Dispatcher(storage=MemoryStorage())
@@ -578,7 +559,6 @@ async def setup_handlers(bot):
             data['current_state'] = previous_state
             return previous_state
         return None
-
 
     async def save_dialog_message(chat_id: int, ai_name: str, role: str, content: str):
         """
@@ -1655,7 +1635,7 @@ async def setup_handlers(bot):
                 if line:
                     decoded_line = line.decode('utf-8').strip()
                     # Выводим сырые данные API
-                    #print(f"[DEBUG] raw line: {decoded_line}")
+                    # print(f"[DEBUG] raw line: {decoded_line}")
 
                     if decoded_line.startswith('data: '):
                         json_data = decoded_line[len('data: '):].strip()
@@ -1664,7 +1644,7 @@ async def setup_handlers(bot):
                         try:
                             chunk = json.loads(json_data)
                             # Показываем, что в JSON
-                            #print(f"[DEBUG] parsed JSON: {chunk}")
+                            # print(f"[DEBUG] parsed JSON: {chunk}")
 
                             if 'choices' in chunk and chunk['choices']:
                                 content = chunk['choices'][0].get(
@@ -1761,15 +1741,6 @@ async def setup_handlers(bot):
             )
             if sent_message:
                 await sent_message.delete()
-
-
-class UserStateFilter(BaseFilter):
-    def __init__(self, state_name: str):
-        self.state_name = state_name
-
-    async def __call__(self, message: Message) -> bool:
-        return user_states.get(message.chat.id) == self.state_name
-
 
 # Инициализация Mistral AI клиента
 mistral_client = Mistral(api_key=MISTRAL_API_KEY)
