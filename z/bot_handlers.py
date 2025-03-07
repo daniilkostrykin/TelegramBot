@@ -380,7 +380,7 @@ async def setup_handlers(bot):
                 if chat_id in user_states:
                     del user_states[chat_id]
                 await save_user_state(state, 'ai_selection')
-                await state.finish()
+                await state.clear()  # Было finish(), заменено на clear()
                 return
 
             query = test_query if test_query else message.text
@@ -438,7 +438,7 @@ async def setup_handlers(bot):
             if chat_id in user_states:
                 del user_states[chat_id]
             await save_user_state(state, 'main_menu')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         elif message.text == '⬅️ Назад':
@@ -449,7 +449,7 @@ async def setup_handlers(bot):
             await save_user_state(state, 'g4f_model_selection')
             if chat_id in g4f_dialog_sessions:
                 del g4f_dialog_sessions[chat_id]
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         query = message.text
@@ -898,7 +898,7 @@ async def setup_handlers(bot):
     async def handle_g4f_model_selection(message: types.Message, state: FSMContext):
         if message.text == '⬅️ Назад':
             await choose_ai(message)
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         model_mapping = {
@@ -1289,7 +1289,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         elif message.text == '⬅️ Назад':
@@ -1304,7 +1304,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         try:
@@ -1397,7 +1397,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         # Маппинг моделей с их API именами
@@ -1436,7 +1436,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         if message.text == "Midjourney":
@@ -1457,7 +1457,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         valid_options = {
@@ -1487,7 +1487,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         if message.text == "Glide":
@@ -1512,7 +1512,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         if message.text == "Tough Tongue AI":
@@ -1537,7 +1537,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         if message.text == "Memenome":
@@ -1564,7 +1564,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.finish()
+            await state.clear()  # Было finish(), заменено на clear()
             return
 
         translated_text = translate_text(message.text)
