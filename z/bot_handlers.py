@@ -28,15 +28,10 @@ from src.models import DialogStates, UserStateFilter
 
 # Константы для Qwen
 API_URL = "https://api.together.xyz/inference"
+ 
+#DATABASE_URL = os.environ.get("DB_URL")
 
-# DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:XgFOPaWGkymuYpcXKkuSJwIlcPihcHKI@autorack.proxy.rlwy.net:36255/railway")
-# Получаем URL базы данных из переменной окружения
-DATABASE_URL = os.environ.get("DB_URL")
-if not DATABASE_URL:
-    print("Ошибка: Не найдена переменная окружения DB_URL из системы.  Убедитесь, что она установлена.")
-    # DATABASE_URL = "postgresql://postgres:QAUOzYdRBViliseBgLeEjfXxdrwFmtEZ@gondola.proxy.rlwy.net:43252/railway"
-    DATABASE_URL = "postgresql://postgres:tocutLkkpvyyDLmYnEPZrrovLcTbjFvA@postgres.railway.internal:5432/railway"
-    # DATABASE_URL = "postgresql://daniil:liinad@localhost:5432/tgbot"
+DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/postgres"
 
 # Инициализируем диспетчер с хранилищем состояний
 dp = Dispatcher(storage=MemoryStorage())
@@ -63,6 +58,20 @@ def create_tables():
     """)
     print("Database tables created successfully")
     conn.commit()
+
+
+# Инициализируем conn вне блока try
+conn = None
+try:
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    print("Успешно подключено к базе данных!")
+
+    # Просто вызываем синхронную функцию создания таблиц
+    create_tables()
+except psycopg2.Error as e:
+    print(f"Ошибка при подключении к базе данных: {e}")
+
 
 # Добавляем отдельную функцию для отправки уведомления администратору
 
@@ -141,19 +150,6 @@ async def send_keyboard_to_all_users(bot):
         print("Главная клавиатура отправлена всем пользователям")
     except Exception as e:
         print(f"Ошибка при отправке клавиатуры пользователям: {e}")
-
-# Изменяем блок try-except
-conn = None  # Инициализируем conn вне блока try
-try:
-    conn = psycopg2.connect(DATABASE_URL)
-    cursor = conn.cursor()
-    # Выводим сообщение об успешном подключении
-    print("Успешно подключено к базе данных!")
-    # Просто вызываем синхронную функцию создания таблиц
-    create_tables()
-except psycopg2.Error as e:
-    print(f"Ошибка при подключении к базе данных: {e}")
-
 
 logger = logging.getLogger(__name__)
 

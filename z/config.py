@@ -11,7 +11,7 @@ API_URL = "https://api.together.xyz/v1/chat/completions"
 DEEPSEEK_SEARCH_URL = "https://api.deepseek.com/v1/search"
 DEEPSEEK_INTERNET_SEARCH_URL = "https://api.deepseek.com/v1/internet_search"
 DEEPSEEK_TOKEN = "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"
-DB_URL = "postgresql://postgres:UxAgpKnoEDeQGLsAODlFNlVOirCaoCIa@postgres.railway.internal:5432/railway"
+#DB_URL = "postgresql://postgres:UxAgpKnoEDeQGLsAODlFNlVOirCaoCIa@postgres.railway.internal:5432/railway"
 POPULAR_SITES = {
     "вк": "https://vk.com",
     "одноклассники": "https://ok.ru",
