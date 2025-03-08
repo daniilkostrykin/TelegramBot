@@ -24,41 +24,14 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from mistralai import Mistral
 import aiohttp
 import PIL.Image
-from src.models import DialogStates, UserStateFilter
+from src.models.dialog_state import DialogStates, dialog_manager
+from src.models.user_state import user_state_manager
 
 # Константы для Qwen
 API_URL = "https://api.together.xyz/inference"
- 
-#DATABASE_URL = os.environ.get("DB_URL")
-
-#DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/postgres"
 
 # Инициализируем диспетчер с хранилищем состояний
 dp = Dispatcher(storage=MemoryStorage())
-
-
-def create_tables():
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS dialog_sessions (
-            chat_id BIGINT,
-            ai_name TEXT,
-            messages JSONB,
-            PRIMARY KEY (chat_id, ai_name)
-        );
-    """)
-    # Создаем таблицу для хранения всех пользователей
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            chat_id BIGINT PRIMARY KEY,
-            username TEXT,
-            first_name TEXT,
-            last_name TEXT,
-            last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
-    print("Database tables created successfully")
-    conn.commit()
-
 
 # Получаем URL базы данных из переменной окружения, если она есть
 DATABASE_URL = os.environ.get("DB_URL")
@@ -72,7 +45,8 @@ try:
         print(f"Попытка подключения к удаленной базе: {DATABASE_URL}")
         conn = psycopg2.connect(DATABASE_URL)
     else:
-        raise psycopg2.OperationalError("Переменная окружения DB_URL не задана, пробуем Railway...")
+        raise psycopg2.OperationalError(
+            "Переменная окружения DB_URL не задана, пробуем Railway...")
 
 except psycopg2.Error as e:
     print(f"Ошибка при подключении к {DATABASE_URL}: {e}. Пробуем Railway...")
@@ -81,13 +55,15 @@ except psycopg2.Error as e:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         print("Успешно подключено к Railway!")
     except psycopg2.Error as e:
-        print(f"Ошибка при подключении к Railway: {e}. Пробуем локальную базу...")
+        print(
+            f"Ошибка при подключении к Railway: {e}. Пробуем локальную базу...")
 
         try:
             conn = psycopg2.connect(LOCAL_DB_URL)
             print("Переключено на локальную базу данных!")
         except psycopg2.Error as e:
-            print(f"Ошибка при подключении к локальной базе данных: {e}. Программа завершена.")
+            print(
+                f"Ошибка при подключении к локальной базе данных: {e}. Программа завершена.")
             exit(1)
 
 cursor = conn.cursor()
@@ -390,32 +366,26 @@ async def setup_handlers(bot):
                     "Диалог завершен.",
                     reply_markup=get_ai_selection_keyboard()
                 )
-                if (chat_id, model_name) in dialog_sessions:
-                    print(
-                        f"[WARNING] Удаляю dialog_sessions[{(chat_id, model_name)}]")
-                    del dialog_sessions[(chat_id, model_name)]
-                if chat_id in user_states:
-                    del user_states[chat_id]
+                dialog_manager.clear_dialog_history(chat_id, model_name)
                 await save_user_state(state, 'ai_selection')
-                await state.clear()  # Было finish(), заменено на clear()
+                await state.clear()
                 return
 
             query = test_query if test_query else message.text
             await save_dialog_message(chat_id, model_name, "user", query)
 
             sent_message = await message.answer("Генерация ответа...")
-            active_generations[chat_id] = True
+            dialog_manager.set_active_generation(chat_id, True)
 
             try:
                 model = genai.GenerativeModel(model_name)
-                messages = dialog_sessions.get((chat_id, model_name), [])
+                messages = await get_dialog_history(chat_id, model_name)
                 print(
                     f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
 
                 response = await asyncio.to_thread(model.generate_content, messages)
                 response_text = response.text
-                await save_dialog_message(chat_id, model_name,
-                                          "model", response_text)
+                await save_dialog_message(chat_id, model_name, "model", response_text)
 
                 await safe_send_message(message, response_text)
                 await sent_message.delete()
@@ -534,30 +504,9 @@ async def setup_handlers(bot):
 
     async def save_user_state(state_or_chat_id, new_state: str):
         """
-        Сохраняет текущее состояние пользователя.
-        Args:
-            state_or_chat_id: FSMContext объект или chat_id пользователя
-            new_state: Новое состояние для сохранения
+        Обертка для сохранения состояния пользователя через менеджер состояний
         """
-        if isinstance(state_or_chat_id, int):
-            # Если передан chat_id, просто сохраняем состояние в словарь
-            user_states[state_or_chat_id] = new_state
-        else:
-            # Если передан FSMContext, сохраняем в FSM
-            state = state_or_chat_id
-            data = await state.get_data()
-            if 'states_history' not in data:
-                data['states_history'] = []
-            data['states_history'].append(new_state)
-            data['current_state'] = new_state
-            await state.update_data(data)
-
-            # Также сохраняем в словарь для совместимости
-            try:
-                chat_id = state.key.chat_id
-                user_states[chat_id] = new_state
-            except:
-                pass  # Если не удалось получить chat_id, просто пропускаем
+        await user_state_manager.save_user_state(state_or_chat_id, new_state)
 
     async def get_previous_user_state(state: FSMContext) -> str | None:
         """
@@ -579,97 +528,15 @@ async def setup_handlers(bot):
 
     async def save_dialog_message(chat_id: int, ai_name: str, role: str, content: str):
         """
-        Сохраняет сообщение в диалог пользователя (в БД и в память).
-
-        Args:
-            chat_id: ID чата пользователя
-            ai_name: Название AI модели
-            role: Роль отправителя (user/model)
-            content: Содержание сообщения
+        Обертка для сохранения сообщения диалога через менеджер диалогов
         """
-        print(
-            f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}"
-        )
-
-        # Проверяем, есть ли диалог в памяти
-        if (chat_id, ai_name) not in dialog_sessions:
-            print(
-                f"[ERROR] dialog_sessions НЕ содержит ({chat_id}, {ai_name}). Создаю новый ключ."
-            )
-            dialog_sessions[(chat_id, ai_name)] = []
-
-        # Добавляем сообщение в локальный кэш
-        try:
-            dialog_sessions[(chat_id, ai_name)].append(
-                {"role": role, "parts": [content]}
-            )
-        except KeyError as e:
-            print(f"[CRITICAL ERROR] KeyError при добавлении сообщения! {e}")
-            raise  # Повторно вызываем ошибку, чтобы видеть стек вызова
-
-        # Сохраняем в БД
-        try:
-            # Получаем текущую историю
-            cursor.execute(
-                "SELECT messages FROM dialog_sessions WHERE chat_id = %s AND ai_name = %s",
-                (chat_id, ai_name)
-            )
-            result = cursor.fetchone()
-
-            # Загружаем существующие сообщения
-            old_messages = []
-            if result and result[0]:
-                if isinstance(result[0], list):
-                    old_messages = result[0]
-                elif isinstance(result[0], str):
-                    try:
-                        old_messages = json.loads(result[0])
-                    except json.JSONDecodeError:
-                        print("[ERROR] JSONDecodeError! Используем пустой список.")
-                        old_messages = []
-
-            # Объединяем старые и новые сообщения
-            new_messages = old_messages + [{"role": role, "parts": [content]}]
-
-            # Сохраняем обновленную историю
-            cursor.execute("""
-                INSERT INTO dialog_sessions (chat_id, ai_name, messages)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (chat_id, ai_name)
-                DO UPDATE SET messages = %s;
-            """, (
-                chat_id,
-                ai_name,
-                json.dumps(new_messages, ensure_ascii=False),
-                json.dumps(new_messages, ensure_ascii=False)
-            ))
-            await asyncio.to_thread(conn.commit)
-            print("[LOG] Сообщение успешно сохранено в БД.")
-
-        except Exception as e:
-            print(f"[ERROR] Ошибка при сохранении в БД: {e}")
-            print(traceback.format_exc())
+        await dialog_manager.save_dialog_message(chat_id, ai_name, role, content, cursor, conn)
 
     async def get_dialog_history(chat_id: int, ai_name: str) -> list:
         """
-        Получает всю историю диалога из БД.
-
-        Args:
-            chat_id: ID чата пользователя
-            ai_name: Название AI модели
-
-        Returns:
-            list: Список сообщений диалога
+        Обертка для получения истории диалога через менеджер диалогов
         """
-        cursor.execute(
-            "SELECT messages FROM dialog_sessions WHERE chat_id = %s AND ai_name = %s",
-            (chat_id, ai_name)
-        )
-        result = cursor.fetchone()
-
-        if result:
-            return json.loads(result[0])
-        return []
+        return await dialog_manager.get_dialog_history(chat_id, ai_name, cursor)
 
     @dp.message(Command('user_states'))
     async def show_user_states(message: types.Message):
@@ -677,6 +544,7 @@ async def setup_handlers(bot):
             await message.answer("🚫 У вас нет прав для использования этой команды.")
             return
 
+        user_states = user_state_manager.get_all_user_states()
         await message.answer(f"👥 *Состояния пользователей:*\n{user_states}", parse_mode=ParseMode.MARKDOWN)
 
     @dp.message(Command('send_keyboard'))
@@ -749,7 +617,7 @@ async def setup_handlers(bot):
     @dp.message(F.text == '⬅️ Назад')
     async def back(message: types.Message, state: FSMContext):
         chat_id = message.chat.id
-        current_state = user_states.get(chat_id)
+        current_state = await user_state_manager.get_user_state(chat_id)
 
         state_transitions = {
             'gemini_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
@@ -782,10 +650,7 @@ async def setup_handlers(bot):
             await state.clear()
 
         # Очищаем историю диалога при возврате
-        if chat_id in dialog_sessions:
-            dialog_sessions.pop(chat_id, None)
-        if chat_id in g4f_dialog_sessions:
-            g4f_dialog_sessions.pop(chat_id, None)
+        dialog_manager.clear_dialog_history(chat_id)
 
     @dp.message(F.text == 'Видео')
     async def handle_video(message: types.Message):
@@ -1497,7 +1362,7 @@ async def setup_handlers(bot):
             await message.answer("Пожалуйста, выберите сервис из предложенных вариантов.")
 
     @dp.message(StateFilter(DialogStates.waiting_for_nocode))
-    async def handle_nocode_selection(message: types.Message, state: FSMContext):
+    async def handle_ai_nocode(message: types.Message, state: FSMContext):
         if message.text == '⬅️ Назад':
             await message.answer(
                 "Возврат в меню выбора AI.",
@@ -1522,7 +1387,7 @@ async def setup_handlers(bot):
             await message.answer("Пожалуйста, выберите платформу из предложенных вариантов.")
 
     @dp.message(StateFilter(DialogStates.waiting_for_appearance))
-    async def handle_appearance_selection(message: types.Message, state: FSMContext):
+    async def handle_ai_appearance(message: types.Message, state: FSMContext):
         if message.text == '⬅️ Назад':
             await message.answer(
                 "Возврат в меню выбора AI.",
@@ -1547,7 +1412,7 @@ async def setup_handlers(bot):
             await message.answer("Пожалуйста, выберите сервис из предложенных вариантов.")
 
     @dp.message(StateFilter(DialogStates.waiting_for_photo))
-    async def handle_photo_selection(message: types.Message, state: FSMContext):
+    async def handle_ai_photo(message: types.Message, state: FSMContext):
         if message.text == '⬅️ Назад':
             await message.answer(
                 "Возврат в меню выбора AI.",
