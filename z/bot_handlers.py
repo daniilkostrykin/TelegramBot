@@ -31,7 +31,7 @@ API_URL = "https://api.together.xyz/inference"
  
 #DATABASE_URL = os.environ.get("DB_URL")
 
-DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/postgres"
+#DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/postgres"
 
 # Инициализируем диспетчер с хранилищем состояний
 dp = Dispatcher(storage=MemoryStorage())
@@ -60,17 +60,38 @@ def create_tables():
     conn.commit()
 
 
-# Инициализируем conn вне блока try
-conn = None
-try:
-    conn = psycopg2.connect(DATABASE_URL)
-    cursor = conn.cursor()
-    print("Успешно подключено к базе данных!")
+# Получаем URL базы данных из переменной окружения, если она есть
+DATABASE_URL = os.environ.get("DB_URL")
+RAILWAY_DB_URL = "postgresql://postgres:tocutLkkpvyyDLmYnEPZrrovLcTbjFvA@postgres.railway.internal:5432/railway"
+LOCAL_DB_URL = "postgresql://postgres:postgres@localhost:5433/postgres"
 
-    # Просто вызываем синхронную функцию создания таблиц
-    create_tables()
+conn = None
+
+try:
+    if DATABASE_URL:
+        print(f"Попытка подключения к удаленной базе: {DATABASE_URL}")
+        conn = psycopg2.connect(DATABASE_URL)
+    else:
+        raise psycopg2.OperationalError("Переменная окружения DB_URL не задана, пробуем Railway...")
+
 except psycopg2.Error as e:
-    print(f"Ошибка при подключении к базе данных: {e}")
+    print(f"Ошибка при подключении к {DATABASE_URL}: {e}. Пробуем Railway...")
+
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        print("Успешно подключено к Railway!")
+    except psycopg2.Error as e:
+        print(f"Ошибка при подключении к Railway: {e}. Пробуем локальную базу...")
+
+        try:
+            conn = psycopg2.connect(LOCAL_DB_URL)
+            print("Переключено на локальную базу данных!")
+        except psycopg2.Error as e:
+            print(f"Ошибка при подключении к локальной базе данных: {e}. Программа завершена.")
+            exit(1)
+
+cursor = conn.cursor()
+print("Подключение успешно!")
 
 
 # Добавляем отдельную функцию для отправки уведомления администратору
