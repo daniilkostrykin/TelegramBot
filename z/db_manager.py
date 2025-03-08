@@ -12,6 +12,7 @@ class DatabaseManager:
     def __init__(self):
         self.conn = None
         self.cursor = None
+        self.dialog_sessions = {}  # Локальный кэш для диалогов
         self._connect()
 
     def _connect(self):
@@ -88,7 +89,7 @@ class DatabaseManager:
 
     async def save_dialog_message(self, chat_id: int, ai_name: str, role: str, content: str) -> None:
         """
-        Сохраняет сообщение в диалог пользователя в БД.
+        Сохраняет сообщение в диалог пользователя (в БД и в память).
 
         Args:
             chat_id: ID чата пользователя
@@ -96,6 +97,28 @@ class DatabaseManager:
             role: Роль отправителя (user/model)
             content: Содержание сообщения
         """
+        print(
+            f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}"
+        )
+
+        # Проверяем, есть ли диалог в памяти
+        dialog_key = (chat_id, ai_name)
+        if dialog_key not in self.dialog_sessions:
+            print(
+                f"[LOG] dialog_sessions НЕ содержит {dialog_key}. Создаю новый ключ."
+            )
+            self.dialog_sessions[dialog_key] = []
+
+        # Добавляем сообщение в локальный кэш
+        try:
+            self.dialog_sessions[dialog_key].append(
+                {"role": role, "parts": [content]}
+            )
+        except KeyError as e:
+            print(f"[CRITICAL ERROR] KeyError при добавлении сообщения! {e}")
+            raise
+
+        # Сохраняем в БД
         try:
             # Получаем текущую историю
             self.cursor.execute(
@@ -140,26 +163,65 @@ class DatabaseManager:
             raise
 
     async def get_dialog_history(self, chat_id: int, ai_name: str) -> List[dict]:
-        """Получает историю диалога для конкретного пользователя и AI"""
+        """
+        Получает историю диалога для конкретного пользователя и AI.
+        Сначала проверяет локальный кэш, затем БД.
+        """
+        dialog_key = (chat_id, ai_name)
+
+        # Проверяем локальный кэш
+        if dialog_key in self.dialog_sessions:
+            return self.dialog_sessions[dialog_key]
+
+        # Если в кэше нет, получаем из БД
         try:
             self.cursor.execute("""
-                SELECT role, content
+                SELECT messages
                 FROM dialog_sessions
                 WHERE chat_id = %s AND ai_name = %s
-                ORDER BY timestamp ASC
             """, (chat_id, ai_name))
 
-            messages = []
-            for role, content in self.cursor.fetchall():
-                if role == "user":
-                    messages.append({"role": role, "parts": [content]})
-                else:
-                    messages.append({"role": role, "parts": [content]})
-
-            return messages
+            result = self.cursor.fetchone()
+            if result and result[0]:
+                try:
+                    messages = json.loads(result[0]) if isinstance(
+                        result[0], str) else result[0]
+                    # Сохраняем в кэш
+                    self.dialog_sessions[dialog_key] = messages
+                    return messages
+                except json.JSONDecodeError:
+                    logger.error("Ошибка при декодировании JSON из БД")
+                    return []
+            return []
         except Exception as e:
             logger.error(f"Ошибка при получении истории диалога: {e}")
             return []
+
+    def clear_dialog_history(self, chat_id: int, ai_name: str = None) -> None:
+        """
+        Очищает историю диалога для конкретного пользователя.
+        Если ai_name не указан, очищает все диалоги пользователя.
+        """
+        try:
+            # Очищаем локальный кэш
+            if ai_name:
+                dialog_key = (chat_id, ai_name)
+                if dialog_key in self.dialog_sessions:
+                    del self.dialog_sessions[dialog_key]
+                # Очищаем в БД
+
+            else:
+                # Очищаем все диалоги пользователя
+                keys_to_delete = [
+                    k for k in self.dialog_sessions.keys() if k[0] == chat_id]
+                for key in keys_to_delete:
+                    del self.dialog_sessions[key]
+                # Очищаем в БД
+
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"Ошибка при очистке истории диалога: {e}")
+            raise
 
     def close(self):
         """Закрывает соединение с базой данных"""

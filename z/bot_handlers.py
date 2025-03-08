@@ -350,20 +350,20 @@ async def setup_handlers(bot):
                 return
 
             query = test_query if test_query else message.text
-            await save_dialog_message(chat_id, model_name, "user", query)
+            await db_manager.save_dialog_message(chat_id, model_name, "user", query)
 
             sent_message = await message.answer("Генерация ответа...")
             dialog_manager.set_active_generation(chat_id, True)
 
             try:
                 model = genai.GenerativeModel(model_name)
-                messages = await get_dialog_history(chat_id, model_name)
+                messages = await db_manager.get_dialog_history(chat_id, model_name)
                 print(
                     f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
 
                 response = await asyncio.to_thread(model.generate_content, messages)
                 response_text = response.text
-                await save_dialog_message(chat_id, model_name, "model", response_text)
+                await db_manager.save_dialog_message(chat_id, model_name, "model", response_text)
 
                 await safe_send_message(message, response_text)
                 await sent_message.delete()
@@ -418,7 +418,7 @@ async def setup_handlers(bot):
             return
 
         query = message.text
-        await save_dialog_message(chat_id, "g4f", "user", query)
+        await db_manager.save_dialog_message(chat_id, "g4f", "user", query)
 
         if chat_id not in g4f_dialog_sessions:
             g4f_dialog_sessions[chat_id] = []
@@ -430,7 +430,7 @@ async def setup_handlers(bot):
 
         try:
             response = await asyncio.to_thread(g4f_bot.ask, query)
-            await save_dialog_message(chat_id, "g4f", "assistant", response)
+            await db_manager.save_dialog_message(chat_id, "g4f", "assistant", response)
 
             response_text = response
             max_length = 4000  # Telegram ограничение
@@ -503,45 +503,6 @@ async def setup_handlers(bot):
             data['current_state'] = previous_state
             return previous_state
         return None
-
-    async def save_dialog_message(chat_id: int, ai_name: str, role: str, content: str):
-        """
-        Сохраняет сообщение в диалог пользователя (в БД и в память).
-
-        Args:
-            chat_id: ID чата пользователя
-            ai_name: Название AI модели
-            role: Роль отправителя (user/model)
-            content: Содержание сообщения
-        """
-        print(
-            f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}"
-        )
-
-        # Проверяем, есть ли диалог в памяти
-        if (chat_id, ai_name) not in dialog_sessions:
-            print(
-                f"[ERROR] dialog_sessions НЕ содержит ({chat_id}, {ai_name}). Создаю новый ключ."
-            )
-            dialog_sessions[(chat_id, ai_name)] = []
-
-        # Добавляем сообщение в локальный кэш
-        try:
-            dialog_sessions[(chat_id, ai_name)].append(
-                {"role": role, "parts": [content]}
-            )
-        except KeyError as e:
-            print(f"[CRITICAL ERROR] KeyError при добавлении сообщения! {e}")
-            raise  # Повторно вызываем ошибку, чтобы видеть стек вызова
-
-        # Сохраняем в БД
-        await db_manager.save_dialog_message(chat_id, ai_name, role, content)
-
-    async def get_dialog_history(chat_id: int, ai_name: str) -> list:
-        """
-        Обертка для получения истории диалога через менеджер диалогов
-        """
-        return await db_manager.get_dialog_history(chat_id, ai_name)
 
     @dp.message(Command('user_states'))
     async def show_user_states(message: types.Message):
@@ -1201,7 +1162,7 @@ async def setup_handlers(bot):
             model_name = data.get('mistral_model', 'mistral-small-latest')
 
             # Сохраняем сообщение пользователя
-            await save_dialog_message(chat_id, "mistral", "user", message.text)
+            await db_manager.save_dialog_message(chat_id, "mistral", "user", message.text)
             sent_message = await message.answer("Генерация ответа...")
 
             # Получаем историю диалога из локального кэша
@@ -1230,7 +1191,7 @@ async def setup_handlers(bot):
             response_text = chat_response.choices[0].message.content
 
             # Сохраняем ответ модели
-            await save_dialog_message(chat_id, "mistral", "assistant", response_text)
+            await db_manager.save_dialog_message(chat_id, "mistral", "assistant", response_text)
 
             # Отправляем ответ
             await sent_message.delete()
@@ -1579,7 +1540,7 @@ async def setup_handlers(bot):
 
         try:
             # Сохраняем сообщение пользователя
-            await save_dialog_message(chat_id, "qwen", "user", message.text)
+            await db_manager.save_dialog_message(chat_id, "qwen", "user", message.text)
             print(f"[LOG] Сообщение пользователя сохранено: {message.text}")
 
             # Получаем историю диалога
@@ -1609,7 +1570,7 @@ async def setup_handlers(bot):
                 return
 
             # Сохраняем ответ модели
-            await save_dialog_message(chat_id, "qwen", "assistant", response_text)
+            await db_manager.save_dialog_message(chat_id, "qwen", "assistant", response_text)
             print(f"[LOG] Ответ модели сохранен: {response_text[:100]}...")
 
             # Обновляем историю диалога
