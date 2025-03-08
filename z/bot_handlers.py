@@ -26,6 +26,7 @@ import aiohttp
 import PIL.Image
 from src.models.dialog_state import DialogStates, dialog_manager
 from src.models.user_state import user_state_manager
+from z.db_manager import db_manager
 
 # Константы для Qwen
 API_URL = "https://api.together.xyz/inference"
@@ -84,42 +85,19 @@ async def send_admin_notification(bot):
 
 
 async def get_all_users():
-    try:
-        # Сначала пробуем получить пользователей из таблицы users
-        cursor.execute("SELECT chat_id FROM users")
-        users = cursor.fetchall()
-
-        if not users:
-            # Если таблица users пуста, получаем пользователей из dialog_sessions
-            cursor.execute("SELECT DISTINCT chat_id FROM dialog_sessions")
-            users = cursor.fetchall()
-
-        return [user[0] for user in users]
-    except Exception as e:
-        print(f"Ошибка при получении списка пользователей: {e}")
-        return []
+    return await db_manager.get_all_users()
 
 # Добавляем функцию для сохранения пользователя в базу данных
 
 
 async def save_user(message: types.Message):
     try:
-        cursor.execute("""
-            INSERT INTO users (chat_id, username, first_name, last_name)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (chat_id)
-            DO UPDATE SET
-                username = EXCLUDED.username,
-                first_name = EXCLUDED.first_name,
-                last_name = EXCLUDED.last_name,
-                last_activity = CURRENT_TIMESTAMP;
-        """, (
+        await db_manager.save_user(
             message.from_user.id,
             message.from_user.username,
             message.from_user.first_name,
             message.from_user.last_name
-        ))
-        conn.commit()
+        )
     except Exception as e:
         print(f"Ошибка при сохранении пользователя: {e}")
 
@@ -528,15 +506,42 @@ async def setup_handlers(bot):
 
     async def save_dialog_message(chat_id: int, ai_name: str, role: str, content: str):
         """
-        Обертка для сохранения сообщения диалога через менеджер диалогов
+        Сохраняет сообщение в диалог пользователя (в БД и в память).
+
+        Args:
+            chat_id: ID чата пользователя
+            ai_name: Название AI модели
+            role: Роль отправителя (user/model)
+            content: Содержание сообщения
         """
-        await dialog_manager.save_dialog_message(chat_id, ai_name, role, content, cursor, conn)
+        print(
+            f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}"
+        )
+
+        # Проверяем, есть ли диалог в памяти
+        if (chat_id, ai_name) not in dialog_sessions:
+            print(
+                f"[ERROR] dialog_sessions НЕ содержит ({chat_id}, {ai_name}). Создаю новый ключ."
+            )
+            dialog_sessions[(chat_id, ai_name)] = []
+
+        # Добавляем сообщение в локальный кэш
+        try:
+            dialog_sessions[(chat_id, ai_name)].append(
+                {"role": role, "parts": [content]}
+            )
+        except KeyError as e:
+            print(f"[CRITICAL ERROR] KeyError при добавлении сообщения! {e}")
+            raise  # Повторно вызываем ошибку, чтобы видеть стек вызова
+
+        # Сохраняем в БД
+        await db_manager.save_dialog_message(chat_id, ai_name, role, content)
 
     async def get_dialog_history(chat_id: int, ai_name: str) -> list:
         """
         Обертка для получения истории диалога через менеджер диалогов
         """
-        return await dialog_manager.get_dialog_history(chat_id, ai_name, cursor)
+        return await db_manager.get_dialog_history(chat_id, ai_name)
 
     @dp.message(Command('user_states'))
     async def show_user_states(message: types.Message):
