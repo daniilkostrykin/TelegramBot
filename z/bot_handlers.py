@@ -1170,6 +1170,13 @@ async def setup_handlers(bot):
             print(
                 f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
 
+            # Добавляем текущее сообщение пользователя
+            messages.append({
+                "role": "user",
+                "content": message.text
+            })
+            dialog_sessions[(chat_id, "mistral")] = messages
+
             # Преобразуем сообщения в формат Mistral
             mistral_messages = []
             for msg in messages:
@@ -1182,6 +1189,13 @@ async def setup_handlers(bot):
                             "content": content
                         })
 
+            # Если история пуста, добавляем хотя бы текущее сообщение
+            if not mistral_messages:
+                mistral_messages.append({
+                    "role": "user",
+                    "content": message.text
+                })
+
             # Запрос к Mistral AI с выбранной моделью
             chat_response = mistral_client.chat.complete(
                 model=model_name,
@@ -1192,6 +1206,13 @@ async def setup_handlers(bot):
 
             # Сохраняем ответ модели
             await db_manager.save_dialog_message(chat_id, "mistral", "assistant", response_text)
+
+            # Сохраняем ответ в локальный кэш
+            messages.append({
+                "role": "assistant",
+                "content": response_text
+            })
+            dialog_sessions[(chat_id, "mistral")] = messages
 
             # Отправляем ответ
             await sent_message.delete()
