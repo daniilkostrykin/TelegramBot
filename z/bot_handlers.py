@@ -725,7 +725,7 @@ async def setup_handlers(bot):
         return GoogleTranslator(source="auto", target=target_lang).translate(text)
 
     @dp.message(lambda message: message.text == 'Midjourney')
-    async def handle_midjourney_choice(message: Message):
+    async def handle_midjourney_choice(message: Message, state: FSMContext):
         await message.answer(
             "Вы выбрали Midjourney. Введите запрос для генерации изображения.",
             reply_markup=get_dialog_keyboard()
@@ -941,6 +941,8 @@ async def setup_handlers(bot):
         await message.answer("Вы выбрали Midjourney. Введите запрос для генерации изображения:",
                              reply_markup=get_dialog_keyboard())
         await save_user_state(state, 'midjourney_dialog')
+        # ИСПРАВЛЕНО
+        await state.set_state(DialogStates.waiting_for_midjourney)
 
     @dp.message(StateFilter(DialogStates.waiting_for_dialog))
     async def process_dialog_message(message: types.Message, state: FSMContext):
@@ -1336,56 +1338,46 @@ async def setup_handlers(bot):
 
     @dp.message(StateFilter(DialogStates.waiting_for_midjourney))
     async def handle_midjourney_dialog(message: Message, state: FSMContext):
-        chat_id = message.chat.id
-
         if message.text in ['⬅️ Назад', '⏹️ Завершить диалог']:
             await message.answer(
                 "Возврат в меню нейросетей.",
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'ai_selection')
-            await state.clear()  # Было finish(), заменено на clear()
+            await state.clear()
             return
 
         translated_text = translate_text(message.text)
         loading_message = await message.answer("Генерация картинки...")
 
-        stop_event = threading.Event()
-        loading_thread = threading.Thread(
-            target=lambda: asyncio.run(
-                update_loading_message(loading_message, stop_event))
-        )
-        loading_thread.start()
-
-        start_time = time.time()
-
         try:
             client = Client()
-            response = client.images.generate(
-                model="flux",
-                prompt=translated_text,
-                response_format="url"
-            )
+            async with aiohttp.ClientSession() as session:
+                response = await client.images.async_generate(
+                    model="flux",
+                    prompt=translated_text,
+                    response_format="url"
+                )
 
-            image_url = response.data[0].url
-            image_data = requests.get(image_url).content
+                image_url = response.data[0].url
+                async with session.get(image_url) as img_response:
+                    image_data = await img_response.read()
 
-            stop_event.set()
-            loading_thread.join()
+                # Создаем InputFile из байтов изображения
+                from aiogram.types import BufferedInputFile
+                input_file = BufferedInputFile(
+                    file=image_data,
+                    filename="generated_image.png"
+                )
 
-            elapsed_time = round(time.time() - start_time, 2)
+                await loading_message.edit_text("✅ Картинка сгенерирована!")
+                # Используем InputFile для отправки фото
+                await message.answer_photo(photo=input_file)
 
-            await dp.bot.edit_message_text(
-                chat_id=message.chat.id,
-                message_id=loading_message.message_id,
-                text=f"✅ Картинка сгенерирована за {elapsed_time} сек!"
-            )
-            await dp.bot.send_photo(message.chat.id, photo=image_data)
         except Exception as e:
-            stop_event.set()
-            loading_thread.join()
-            await message.answer(f"Произошла ошибка при генерации изображения: {str(e)}")
-
+            await loading_message.edit_text(f"❌ Ошибка при генерации изображения: {str(e)}")
+            logger.error(f"Error in Midjourney generation: {str(e)}")
+                
     def get_qwen_response_stream(messages):
         if not TOGETHER_API_KEY:
             raise ValueError("TOGETHER_API_KEY не настроен в .env файле")
