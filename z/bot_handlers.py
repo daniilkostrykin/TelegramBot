@@ -618,20 +618,6 @@ async def setup_handlers(bot):
         # Очищаем историю диалога при возврате
         dialog_manager.clear_dialog_history(chat_id)
 
-    @dp.message(F.text == 'Видео')
-    async def handle_video(message: types.Message):
-        await message.answer("Видео недоступно на сервере.",
-                             reply_markup=get_main_keyboard())
-        # Сохраняем состояние
-        await save_user_state(message.chat.id, 'main_menu')
-
-    @dp.message(F.text == 'Компьютер')
-    async def handle_computer(message: types.Message):
-        await message.answer("Функции управления компьютером недоступны.",
-                             reply_markup=get_main_keyboard())
-        # Сохраняем состояние
-        await save_user_state(message.chat.id, 'main_menu')
-
     class ChatBotG4F:
         def __init__(self):
             self.client = Client()
@@ -991,6 +977,24 @@ async def setup_handlers(bot):
         await save_user_state(message.chat.id, 'photo')
         await state.set_state(DialogStates.waiting_for_photo)
 
+    @dp.message(Command('mistral'))
+    async def handle_mistral_command(message: types.Message, state: FSMContext):
+        """Запуск Mistral AI по команде /mistral"""
+        chat_id = message.chat.id
+
+        # Устанавливаем модель по умолчанию
+        model_name = 'mistral-small-latest'
+
+        # Сохраняем модель в состояние
+        await state.update_data(mistral_model=model_name)
+
+        await message.answer(
+            f"Вы выбрали Mistral AI (модель: {model_name}). Начните диалог:",
+            reply_markup=get_dialog_keyboard()
+        )
+        await save_user_state(state, 'mistral_dialog')
+        await state.set_state(DialogStates.waiting_for_mistral_dialog)
+
     @dp.message(Command('gemini'))
     async def handle_gemini_command(message: types.Message, state: FSMContext):
         """Запуск Gemini по команде /gemini"""
@@ -1022,15 +1026,6 @@ async def setup_handlers(bot):
                              reply_markup=get_dialog_keyboard())
         await save_user_state(state, 'midjourney_dialog')
 
-    @dp.message(Command('mistral'))
-    async def handle_mistral_command(message: types.Message, state: FSMContext):
-        """Запуск Mistral AI по команде /mistral"""
-        chat_id = message.chat.id
-        await message.answer("Вы выбрали Mistral AI. Выберите модель:", reply_markup=get_mistral_model_keyboard())
-        await save_user_state(state, 'mistral_model_selection')
-        await state.set_state(DialogStates.waiting_for_mistral_model)
-
-    # Добавляем обработчик для состояния waiting_for_dialog
     @dp.message(StateFilter(DialogStates.waiting_for_dialog))
     async def process_dialog_message(message: types.Message, state: FSMContext):
         """Обработчик сообщений в состоянии диалога с Gemini"""
