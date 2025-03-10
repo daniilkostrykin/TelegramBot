@@ -77,12 +77,6 @@ cursor = conn.cursor()
 print("Подключение успешно!")
 
 
-# Добавляем функцию для получения всех пользователей из базы данных
-
-
-async def get_all_users():
-    return await db_manager.get_all_users()
-
 # Добавляем функцию для сохранения пользователя в базу данных
 
 
@@ -101,24 +95,46 @@ async def save_user(message: types.Message):
 
 
 async def send_keyboard_to_all_users(bot, db_manager):
-    """Отправляет клавиатуру всем пользователям"""
+    """Обновляет клавиатуру у всех пользователей"""
     try:
         users = await db_manager.get_all_users()
-        print(f"Отправка главной клавиатуры {len(users)} пользователям...")
+        logger.info(f"Обновление клавиатуры для {len(users)} пользователей...")
+
         for chat_id in users:
             try:
-                await bot.send_message(
+                # Получаем ID последнего сообщения
+                last_message_id = await db_manager.get_last_message(chat_id)
+
+                if last_message_id:
+                    try:
+                        # Пробуем обновить клавиатуру в последнем сообщении
+                        await bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=last_message_id,
+                            reply_markup=get_main_keyboard()
+                        )
+                        continue  # Если успешно, переходим к следующему пользователю
+                    except Exception as e:
+                        logger.debug(f"Не удалось обновить клавиатуру: {e}")
+
+                # Если не получилось обновить, отправляем новое сообщение
+                message = await bot.send_message(
                     chat_id=chat_id,
-                    text="Бот был перезапущен. Вот главное меню:",
+                    text="Бот был перезапущен",
                     reply_markup=get_main_keyboard()
                 )
-                await asyncio.sleep(0.1)  # Небольшая задержка
+                # Сохраняем ID нового сообщения
+                await db_manager.update_last_message(chat_id, message.message_id)
+
             except Exception as e:
-                print(
-                    f"Ошибка при отправке клавиатуры пользователю {chat_id}: {e}")
-        print("Главная клавиатура отправлена всем пользователям")
+                logger.error(
+                    f"Ошибка при обработке пользователя {chat_id}: {e}")
+
+            await asyncio.sleep(0.1)
+
+        logger.info("Клавиатура обновлена для всех пользователей")
     except Exception as e:
-        print(f"Ошибка при отправке клавиатуры пользователям: {e}")
+        logger.error(f"Ошибка при обновлении клавиатур: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -154,10 +170,8 @@ async def setup_handlers(bot):
     @dp.message(Command('start'))
     async def start(message: types.Message):
         try:
-            # Сохраняем пользователя в базу данных
             await save_user(message)
-
-            await message.answer(
+            sent_message = await message.answer(
                 f"Привет, {message.from_user.first_name}!\n\n"
                 "Я бот, который предоставляет доступ к различным нейросетям и другим полезным функциям.\n\n"
                 "Вот что я умею:\n"
@@ -167,206 +181,18 @@ async def setup_handlers(bot):
                 "Чтобы начать, выберите пункт в меню.",
                 reply_markup=get_main_keyboard()
             )
-            # Сохраняем состояние
+            # Сохраняем ID отправленного сообщения
+            await db_manager.update_last_message(message.chat.id, sent_message.message_id)
             await save_user_state(message.chat.id, 'main_menu')
         except Exception as e:
             logger.error(f"Error in start command: {e}")
             await message.answer('Произошла ошибка')
-
-    def process_code_block(text: str) -> list:
-        """
-        Разделяет текст на обычный текст и блоки кода.
-        Возвращает список кортежей (текст, is_code).
-        """
-        parts = []
-        pattern = r'```(?:python)?\n([\s\S]*?)```'
-        last_end = 0
-
-        for match in re.finditer(pattern, text):
-            if match.start() > last_end:
-                parts.append((text[last_end:match.start()], False))
-
-            parts.append((match.group(1), True))
-            last_end = match.end()
-
-        if last_end < len(text):
-            parts.append((text[last_end:], False))
-
-        return parts if parts else [(text, False)]
-
-    def to_markdown(text: str) -> str:
-        """
-        Преобразует текст в формат Markdown для Telegram.
-        Обрабатывает жирный текст, код и другие элементы.
-        """
-        bold_texts = []
-
-        def save_bold(match):
-            inner_text = match.group(1)
-            bold_texts.append(inner_text)
-            return f"§BOLD{len(bold_texts)-1}§"
-
-        math_exprs = []
-
-        def save_math(match):
-            math_exprs.append(match.group(0))
-            return f"§MATH{len(math_exprs)-1}§"
-
-        # Сначала сохраняем математические выражения
-        # Сохраняем сложные математические выражения с последовательными умножениями
-        text = re.sub(
-            r'(?:\d+(?:/\d+)?|\(\d+(?:/\d+)?\))(?:\s*\*\s*(?:\d+(?:/\d+)?|\(\d+(?:/\d+)?\)))+', save_math, text)
-        # Сохраняем простые умножения вида 2 * 3
-        text = re.sub(r'\d+\s*\*\s*\d+', save_math, text)
-        # Сохраняем степени вида ^6
-        text = re.sub(r'\^[0-9]+', save_math, text)
-
-        # Сохраняем маркеры списка, заменяя их временно
-        text = re.sub(r'^(\s*)\*(\s+)', r'\1§LIST§\2',
-                      text, flags=re.MULTILINE)
-
-        # Обрабатываем двойные звездочки (обычный жирный текст)
-        text = re.sub(r'\*\*(.*?)\*\*', save_bold, text, flags=re.DOTALL)
-
-        # Обрабатываем одиночные звездочки (если это не маркер списка)
-        text = re.sub(r'\*([^*\n]+)\*', save_bold, text)
-
-        # Возвращаем маркеры списка
-        text = text.replace('§LIST§', '*')
-
-        # Заменяем HTML-теги
-        text = re.sub(r'<sup>([^<]+)</sup>', r'^\1', text)
-        text = re.sub(r'<sub>([^<]+)</sub>', r'_\1', text)
-
-        # Заменяем маркеры списка на буллеты
-        text = re.sub(r'^\s*\*\s+', '• ', text, flags=re.MULTILINE)
-
-        # Экранируем специальные символы Markdown
-        special_chars = '_*[]()~>#+-=|{}.!\\'
-        escaped_text = ''.join(
-            f'\\{char}' if char in special_chars else char for char in text)
-        text = escaped_text
-
-        # Вставляем назад жирный текст
-        for i, bold_text in enumerate(bold_texts):
-            escaped_bold = ''.join(
-                f'\\{char}' if char in special_chars and char != '*' else char for char in bold_text)
-            text = text.replace(f"§BOLD{i}§", f"*{escaped_bold}*")
-
-        # Вставляем назад математические выражения
-        for i, math_expr in enumerate(math_exprs):
-            escaped_expr = ''.join(
-                f'\\{char}' if char in special_chars else char for char in math_expr)
-            text = text.replace(f"§MATH{i}§", escaped_expr)
-
-        return text
-
-    async def safe_send_message(message: types.Message, text: str):
-        MAX_LENGTH = 3500
-        try:
-            parts = process_code_block(text)
-            current_message = ""
-
-            for content, is_code in parts:
-                if not content.strip():
-                    continue
-
-                if is_code:
-                    if current_message:
-                        try:
-                            await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
-                        except Exception as e:
-                            if "can't parse entities: Can't find end of Bold" in str(e):
-                                # Если ошибка связана с незакрытым жирным текстом, добавляем закрывающую звездочку
-                                fixed_text = current_message
-                                # Если нечетное количество звездочек
-                                if fixed_text.count('*') % 2 != 0:
-                                    fixed_text += '*'
-                                await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
-                            else:
-                                await message.answer(current_message)
-                        current_message = ""
-
-                    # Разбиваем длинный код на части
-                    code_parts = [content[i:i + MAX_LENGTH]
-                                  for i in range(0, len(content), MAX_LENGTH)]
-                    for code_part in code_parts:
-                        try:
-                            await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
-                        except Exception as e:
-                            if "can't parse entities: Can't find end of PreCode entity" in str(e):
-                                # Если ошибка связана с незакрытым блоком кода, добавляем закрывающие символы
-                                fixed_code = code_part
-                                if not fixed_code.endswith('\n'):
-                                    fixed_code += '\n'
-                                await message.answer(f"```\n{fixed_code}\n```", parse_mode=ParseMode.MARKDOWN_V2)
-                            else:
-                                await message.answer(code_part)
-                else:
-                    formatted_text = to_markdown(content)
-
-                    if len(current_message) + len(formatted_text) > MAX_LENGTH:
-                        try:
-                            await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
-                        except Exception as e:
-                            if "can't parse entities: Can't find end of Bold" in str(e):
-                                # Если ошибка связана с незакрытым жирным текстом, добавляем закрывающую звездочку
-                                fixed_text = current_message
-                                # Если нечетное количество звездочек
-                                if fixed_text.count('*') % 2 != 0:
-                                    fixed_text += '*'
-                                await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
-                            else:
-                                await message.answer(current_message)
-                        current_message = formatted_text
-                    else:
-                        current_message += formatted_text
-
-            if current_message:
-                try:
-                    await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
-                except Exception as e:
-                    if "can't parse entities: Can't find end of Bold" in str(e):
-                        # Если ошибка связана с незакрытым жирным текстом, добавляем закрывающую звездочку
-                        fixed_text = current_message
-                        # Если нечетное количество звездочек
-                        if fixed_text.count('*') % 2 != 0:
-                            fixed_text += '*'
-                        await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
-                    else:
-                        await message.answer(current_message)
-
-        except Exception as e:
-            print(f"Ошибка форматирования: {e}")
-            # Если произошла ошибка форматирования, разбиваем текст на части и отправляем без форматирования
-            text_parts = [text[i:i + MAX_LENGTH]
-                          for i in range(0, len(text), MAX_LENGTH)]
-            for part in text_parts:
-                await message.answer(part)
 
     async def save_user_state(state_or_chat_id, new_state: str):
         """
         Обертка для сохранения состояния пользователя через менеджер состояний
         """
         await user_state_manager.save_user_state(state_or_chat_id, new_state)
-
-    async def get_previous_user_state(state: FSMContext) -> str | None:
-        """
-        Возвращает предыдущее состояние пользователя из FSM.
-
-        Args:
-            state: FSMContext объект для работы с состоянием
-
-        Returns:
-            str | None: Предыдущее состояние или None если истории нет
-        """
-        data = await state.get_data()
-        if 'states_history' in data and len(data['states_history']) > 1:
-            data['states_history'].pop()  # Убираем текущее состояние
-            previous_state = data['states_history'][-1]  # Берем предыдущее
-            data['current_state'] = previous_state
-            return previous_state
-        return None
 
     @dp.message(F.text == '⬅️ Назад')
     async def back(message: types.Message, state: FSMContext):
@@ -482,12 +308,26 @@ async def setup_handlers(bot):
         await message.answer(
             """📄 *Категория: Текст-Текст*
 
-            Нейросети для работы с текстом:
-            - *ChatGPT* – генерация и анализ текста.
-            - *Gemini* – текстовая обработка от Google.
-            - *G4F* – бесплатная альтернатива ChatGPT.
-            - *Microsoft Copilot* – помощник для программистов.
-            - *Github Copilot* – помощник для программистов.
+            Доступные нейросети:
+            
+            - *Gemini* – текстовая модель от Google:
+              • Gemini Pro – мощная модель для сложных задач
+              • Gemini Pro Vision – работа с текстом и изображениями
+            
+            - *G4F* – бесплатная альтернатива ChatGPT:
+              • GPT-4o mini – компактная версия GPT-4
+              • Поддержка контекстных диалогов
+            
+            - *Mistral AI* – европейская языковая модель:
+              • Mistral Small – быстрые ответы
+              • Mistral Medium – улучшенное качество
+              • Mistral Large – максимальная точность
+              • Codestral – специализация на коде
+            
+            - *Qwen* – модель от Alibaba:
+              • Высокая производительность
+              • Поддержка многих языков
+              • Специализация на бизнес-задачах
 
             Выберите модель:""",
             parse_mode=ParseMode.MARKDOWN,

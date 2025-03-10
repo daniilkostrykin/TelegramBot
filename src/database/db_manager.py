@@ -15,6 +15,16 @@ class DatabaseManager:
         self.dialog_sessions = {}  # Локальный кэш для диалогов
         self._connect()
 
+        # Создаем таблицу для хранения последних сообщений
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS last_messages (
+                chat_id BIGINT PRIMARY KEY,
+                message_id BIGINT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        self.conn.commit()
+
     def _connect(self):
         """Устанавливает соединение с базой данных"""
         DATABASE_URL = os.environ.get("DB_URL")
@@ -229,6 +239,33 @@ class DatabaseManager:
             self.cursor.close()
         if self.conn:
             self.conn.close()
+
+    async def update_last_message(self, chat_id: int, message_id: int):
+        """Сохраняет ID последнего сообщения бота"""
+        try:
+            self.cursor.execute("""
+                INSERT INTO last_messages (chat_id, message_id) 
+                VALUES (%s, %s)
+                ON CONFLICT (chat_id) 
+                DO UPDATE SET message_id = EXCLUDED.message_id, 
+                             updated_at = CURRENT_TIMESTAMP
+            """, (chat_id, message_id))
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"Ошибка при сохранении ID сообщения: {e}")
+
+    async def get_last_message(self, chat_id: int) -> int | None:
+        """Получает ID последнего сообщения бота"""
+        try:
+            self.cursor.execute(
+                "SELECT message_id FROM last_messages WHERE chat_id = %s",
+                (chat_id,)
+            )
+            result = self.cursor.fetchone()
+            return result[0] if result else None
+        except Exception as e:
+            logger.error(f"Ошибка при получении ID сообщения: {e}")
+            return None
 
 
 # Создаем глобальный экземпляр менеджера базы данных
