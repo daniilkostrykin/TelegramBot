@@ -5,6 +5,7 @@ import time
 import requests
 import logging
 import os
+from src.handlers.mistral import register_mistral_handlers
 from src.handlers.gemini import register_gemini_handlers
 from z.config import ADMIN_ID, POPULAR_SITES, GEMINI_API_KEY, BOT_TOKEN, MISTRAL_API_KEY, TOGETHER_API_KEY
 import google.generativeai as genai
@@ -135,6 +136,8 @@ async def setup_handlers(bot):
     register_midjourney_handlers(dp)
 
     register_gemini_handlers(dp)
+
+    register_mistral_handlers(dp)
     # Настраиваем административные обработчики
     await setup_admin_handlers(dp, db_manager, dialog_sessions, active_generations)
 
@@ -713,24 +716,6 @@ async def setup_handlers(bot):
         await save_user_state(message.chat.id, 'photo')
         await state.set_state(DialogStates.waiting_for_photo)
 
-    @dp.message(Command('mistral'))
-    async def handle_mistral_command(message: types.Message, state: FSMContext):
-        """Запуск Mistral AI по команде /mistral"""
-        chat_id = message.chat.id
-
-        # Устанавливаем модель по умолчанию
-        model_name = 'mistral-small-latest'
-
-        # Сохраняем модель в состояние
-        await state.update_data(mistral_model=model_name)
-
-        await message.answer(
-            f"Вы выбрали Mistral AI (модель: {model_name}). Начните диалог:",
-            reply_markup=get_dialog_keyboard()
-        )
-        await save_user_state(state, 'mistral_dialog')
-        await state.set_state(DialogStates.waiting_for_mistral_dialog)
-
     @dp.message(Command('g4f'))
     async def handle_g4f_command(message: types.Message, state: FSMContext):
         """Запуск G4F по команде /g4f"""
@@ -738,183 +723,6 @@ async def setup_handlers(bot):
         g4f_bot.set_model("gpt-4o-mini")
         await message.answer("Вы выбрали G4F. Введите ваш запрос:", reply_markup=get_dialog_keyboard())
         await save_user_state(state, 'g4f_dialog')
-
-    # Обработчик для диалога с Mistral
-    @dp.message(StateFilter(DialogStates.waiting_for_mistral_dialog))
-    async def handle_mistral_dialog(message: types.Message, state: FSMContext):
-        chat_id = message.chat.id
-
-        if message.text == '⏹️ Завершить диалог':
-            # Удаляем все диалоги пользователя из локального кэша
-            keys_to_delete = [(cid, ai) for (cid, ai)
-                              in dialog_sessions.keys() if cid == chat_id]
-            for key in keys_to_delete:
-                dialog_sessions.pop(key, None)
-
-            await message.answer(
-                "Диалог завершен.",
-                reply_markup=get_ai_selection_keyboard()
-            )
-            await save_user_state(state, 'ai_selection')
-            await state.clear()  # Было finish(), заменено на clear()
-            return
-
-        elif message.text == '⬅️ Назад':
-            # Удаляем все диалоги пользователя из локального кэша
-            keys_to_delete = [(cid, ai) for (cid, ai)
-                              in dialog_sessions.keys() if cid == chat_id]
-            for key in keys_to_delete:
-                dialog_sessions.pop(key, None)
-
-            await message.answer(
-                "Возврат в меню выбора AI.",
-                reply_markup=get_ai_selection_keyboard()
-            )
-            await save_user_state(state, 'ai_selection')
-            await state.clear()  # Было finish(), заменено на clear()
-            return
-
-        try:
-            # Получаем выбранную модель из состояния
-            data = await state.get_data()
-            # По умолчанию используем mistral-small-latest
-            model_name = data.get('mistral_model', 'mistral-small-latest')
-
-            # Сохраняем сообщение пользователя
-            await db_manager.save_dialog_message(chat_id, "mistral", "user", message.text)
-            sent_message = await message.answer("Генерация ответа...")
-
-            # Получаем историю диалога из локального кэша
-            messages = dialog_sessions.get((chat_id, "mistral"), [])
-            print(
-                f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
-
-            # Добавляем текущее сообщение пользователя
-            messages.append({
-                "role": "user",
-                "content": message.text
-            })
-            dialog_sessions[(chat_id, "mistral")] = messages
-
-            # Преобразуем сообщения в формат Mistral
-            mistral_messages = []
-            for msg in messages:
-                if isinstance(msg, dict) and "role" in msg and ("parts" in msg or "content" in msg):
-                    content = msg.get("parts", [None])[
-                        0] if "parts" in msg else msg.get("content")
-                    if content:
-                        mistral_messages.append({
-                            "role": msg["role"],
-                            "content": content
-                        })
-
-            # Если история пуста, добавляем хотя бы текущее сообщение
-            if not mistral_messages:
-                mistral_messages.append({
-                    "role": "user",
-                    "content": message.text
-                })
-
-            # Запрос к Mistral AI с выбранной моделью
-            chat_response = mistral_client.chat.complete(
-                model=model_name,
-                messages=mistral_messages
-            )
-
-            response_text = chat_response.choices[0].message.content
-
-            # Сохраняем ответ модели
-            await db_manager.save_dialog_message(chat_id, "mistral", "assistant", response_text)
-
-            # Сохраняем ответ в локальный кэш
-            messages.append({
-                "role": "assistant",
-                "content": response_text
-            })
-            dialog_sessions[(chat_id, "mistral")] = messages
-
-            # Отправляем ответ
-            await sent_message.delete()
-            await safe_send_message(message, response_text)
-
-        except Exception as e:
-            logger.error(f"Ошибка Mistral API: {e}")
-            await message.answer(f"Произошла ошибка при генерации ответа: {str(e)}. Попробуйте позже.")
-
-    @dp.message(Command('get_mistral_models'))
-    async def get_mistral_models(message: types.Message):
-        """Получение списка доступных моделей Mistral AI"""
-        try:
-            # Создаем заголовки для запроса
-            headers = {
-                "Authorization": f"Bearer {MISTRAL_API_KEY}",
-                "Content-Type": "application/json"
-            }
-
-            # Выполняем запрос к API
-            async with aiohttp.ClientSession() as session:
-                async with session.get("https://api.mistral.ai/v1/models", headers=headers) as response:
-                    if response.status == 200:
-                        models_data = await response.json()
-
-                        if "data" in models_data and models_data["data"]:
-                            models_text = "Доступные модели Mistral AI:\n\n"
-                            for model in models_data["data"]:
-                                models_text += f"• {model['id']}"
-                                if "description" in model:
-                                    models_text += f" - {model['description']}"
-                                models_text += "\n"
-                        else:
-                            models_text = "Нет доступных моделей."
-                    else:
-                        models_text = f"Ошибка при получении списка моделей. Код ответа: {response.status}"
-
-                    await message.answer(models_text)
-        except Exception as e:
-            logger.error(f"Ошибка при получении списка моделей Mistral: {e}")
-            await message.answer("Произошла ошибка при получении списка моделей. Попробуйте позже.")
-
-    @dp.message(StateFilter(DialogStates.waiting_for_mistral_model))
-    async def handle_mistral_model_selection(message: types.Message, state: FSMContext):
-        """Обработчик выбора модели Mistral AI"""
-        chat_id = message.chat.id
-
-        if message.text == '⬅️ Назад':
-            await message.answer(
-                "Возврат в меню выбора AI.",
-                reply_markup=get_ai_selection_keyboard()
-            )
-            await save_user_state(state, 'ai_selection')
-            await state.clear()  # Было finish(), заменено на clear()
-            return
-
-        # Маппинг моделей с их API именами
-        model_mapping = {
-            'Ministral 8b': 'ministral-8b-latest',
-            'Mistral Medium': 'mistral-medium-latest',
-            'Pixtral Large': 'pixtral-large-latest',
-            'Codestral': 'codestral-latest',
-            'Codestral Mamba': 'codestral-mamba-latest',
-            'Pixtral 12b': 'pixtral-12b-latest',
-            'Mistral Small': 'mistral-small-latest',
-            'Mistral Saba': 'mistral-saba-latest',
-            'Mistral Moderation': 'mistral-moderation-latest'
-        }
-
-        model_name = model_mapping.get(message.text)
-        if not model_name:
-            await message.answer("Пожалуйста, выберите модель из предложенных вариантов.")
-            return
-
-        # Сохраняем выбранную модель в состояние
-        await state.update_data(mistral_model=model_name)
-
-        await message.answer(
-            f"Вы выбрали модель {message.text}. Начните диалог:",
-            reply_markup=get_dialog_keyboard()
-        )
-        await save_user_state(state, 'mistral_dialog')
-        await state.set_state(DialogStates.waiting_for_mistral_dialog)
 
     @dp.message(StateFilter(DialogStates.waiting_for_text_image))
     async def handle_text_image_selection(message: types.Message, state: FSMContext):
@@ -1177,7 +985,3 @@ async def setup_handlers(bot):
             )
             if sent_message:
                 await sent_message.delete()
-
-# Инициализация Mistral AI клиента
-mistral_client = Mistral(api_key=MISTRAL_API_KEY)
- 
