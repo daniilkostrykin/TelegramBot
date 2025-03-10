@@ -32,6 +32,7 @@ from src.database.db_manager import db_manager
 from src.admin.admin_handlers import setup_admin_handlers, send_admin_notification, send_keyboard_to_all_users
 from src.handlers.midjourney import register_midjourney_handlers
 from src.handlers.qwen import register_qwen_handlers
+from src.handlers.g4f import register_g4f_handlers
 
 # Константы для Qwen
 API_URL = "https://api.together.xyz/inference"
@@ -141,7 +142,9 @@ async def setup_handlers(bot):
     register_mistral_handlers(dp)
 
     register_qwen_handlers(dp)
-    
+
+    register_g4f_handlers(dp)
+
     # Настраиваем административные обработчики
     await setup_admin_handlers(dp, db_manager, dialog_sessions, active_generations)
 
@@ -341,96 +344,6 @@ async def setup_handlers(bot):
             for part in text_parts:
                 await message.answer(part)
 
-    async def handle_g4f_dialog(message: types.Message, state: FSMContext):
-        chat_id = message.chat.id
-
-        if message.text == '⏹️ Завершить диалог':
-            await message.answer(
-                "Диалог завершен.",
-                reply_markup=get_main_keyboard()
-            )
-            if chat_id in g4f_dialog_sessions:
-                del g4f_dialog_sessions[chat_id]
-            if chat_id in user_states:
-                del user_states[chat_id]
-            await save_user_state(state, 'main_menu')
-            await state.clear()  # Было finish(), заменено на clear()
-            return
-
-        elif message.text == '⬅️ Назад':
-            await message.answer(
-                "Возврат в меню выбора G4F модели.",
-                reply_markup=get_g4f_model_keyboard()
-            )
-            await save_user_state(state, 'g4f_model_selection')
-            if chat_id in g4f_dialog_sessions:
-                del g4f_dialog_sessions[chat_id]
-            await state.clear()  # Было finish(), заменено на clear()
-            return
-
-        query = message.text
-        await db_manager.save_dialog_message(chat_id, "g4f", "user", query)
-
-        if chat_id not in g4f_dialog_sessions:
-            g4f_dialog_sessions[chat_id] = []
-
-        g4f_dialog_sessions[chat_id].append({"role": "user", "content": query})
-
-        sent_message = await message.answer("Генерация ответа...")
-        active_generations[chat_id] = True  # Помечаем генерацию активной
-
-        try:
-            response = await asyncio.to_thread(g4f_bot.ask, query)
-            await db_manager.save_dialog_message(chat_id, "g4f", "assistant", response)
-
-            response_text = response
-            max_length = 4000  # Telegram ограничение
-            generated_text = ""
-            formatted_chunk = ""
-
-            for i in range(0, len(response_text), max_length):
-                chunk = response_text[i:i + max_length]
-                generated_text += chunk
-                new_formatted_chunk = generated_text
-
-                # Проверяем, изменился ли текст перед обновлением
-                if new_formatted_chunk != formatted_chunk:
-                    formatted_chunk = new_formatted_chunk
-                    await message.answer(
-                        formatted_chunk,
-                        parse_mode=types.ParseMode.HTML
-                    )
-                    await asyncio.sleep(0.5)  # Асинхронная задержка
-
-            # Добавляем ответ в историю
-            g4f_dialog_sessions[chat_id].append(
-                {"role": "assistant", "content": response_text}
-            )
-            await sent_message.delete()
-
-            # Сохраняем состояние для следующего сообщения
-            await state.set_state(DialogStates.waiting_for_g4f_dialog)
-
-        except Exception as e:
-            error_message = f"Ошибка: {type(e).__name__} - {str(e)}"
-            logger.error(error_message)
-            print(error_message)
-
-            try:
-                # Пробуем отправить текст без форматирования
-                plain_text = re.sub(
-                    r'<[^>]+>', '',
-                    formatted_chunk if formatted_chunk else response_text
-                )
-                await message.answer(plain_text)
-            except Exception as e2:
-                logger.error(
-                    f"Повторная ошибка при отправке без форматирования: {e2}")
-                await message.answer("Ошибка при отправке сообщения. Попробуйте позже.")
-
-            # Сохраняем состояние несмотря на ошибку
-            await state.set_state(DialogStates.waiting_for_g4f_dialog)
-
     async def save_user_state(state_or_chat_id, new_state: str):
         """
         Обертка для сохранения состояния пользователя через менеджер состояний
@@ -493,35 +406,6 @@ async def setup_handlers(bot):
         # Очищаем историю диалога при возврате
         dialog_manager.clear_dialog_history(chat_id)
 
-    class ChatBotG4F:
-        def __init__(self):
-            self.client = Client()
-            self.messages = []
-
-        def set_model(self, model_name: str):
-            """Устанавливает модель для G4F"""
-            self.model_name = model_name
-
-        async def ask(self, user_input: str) -> str:
-            """Отправляет запрос в G4F и получает ответ"""
-            self.messages.append({"role": "user", "content": user_input})
-
-            try:
-                response = await asyncio.to_thread(
-                    self.client.chat.completions.create,
-                    model=self.model_name,
-                    messages=self.messages,
-                )
-                reply = response.choices[0].message.content
-                self.messages.append({"role": "assistant", "content": reply})
-                return reply
-            except Exception as err:
-                logger.error(f"Ошибка при запросе к {self.model_name}: {err}")
-                return "Не удалось получить ответ."
-
-    # Создаем экземпляр бота для G4F
-    g4f_bot = ChatBotG4F()
-
     @dp.message(F.text == 'Нейросети')
     async def handle_ai(message: types.Message):
         # Сохраняем пользователя
@@ -552,15 +436,13 @@ async def setup_handlers(bot):
         )
         await save_user_state(message.chat.id, 'ai_selection')
 
-    @dp.message(F.text.in_(['ChatGPT', 'Gemini', 'G4F (Аналог ChatGPT)', 'Microsoft Copilot', 'Github Copilot', 'Mistral AI', 'Qwen']))
+    @dp.message(F.text.in_(['ChatGPT', 'Gemini', 'Microsoft Copilot', 'Github Copilot', 'Mistral AI', 'Qwen']))
     async def handle_ai_choice(message: types.Message, state: FSMContext):
         chat_id = message.chat.id
 
         # Очищаем предыдущие состояния и истории диалогов
         if chat_id in dialog_sessions:
             dialog_sessions.pop(chat_id, None)
-        if chat_id in g4f_dialog_sessions:
-            g4f_dialog_sessions.pop(chat_id, None)
         await state.clear()
 
         if message.text == 'Gemini':
@@ -570,14 +452,6 @@ async def setup_handlers(bot):
             )
             await save_user_state(state, 'gemini_model_selection')
             await state.set_state(DialogStates.waiting_for_model_selection)
-
-        elif message.text == 'G4F (Аналог ChatGPT)':
-            await message.answer(
-                "Вы выбрали G4F. Выберите модель:",
-                reply_markup=get_g4f_model_keyboard()
-            )
-            await save_user_state(state, 'g4f_model_selection')
-            await state.set_state(DialogStates.waiting_for_g4f_model)
 
         elif message.text == 'Mistral AI':
             await message.answer(
@@ -601,31 +475,7 @@ async def setup_handlers(bot):
                 reply_markup=get_ai_selection_keyboard()
             )
             await save_user_state(state, 'main_menu')
-            await state.clear()  # Очищаем состояние FSM
-
-    @dp.message(StateFilter(DialogStates.waiting_for_g4f_model))
-    async def handle_g4f_model_selection(message: types.Message, state: FSMContext):
-        if message.text == '⬅️ Назад':
-            await choose_ai(message)
-            await state.clear()  # Было finish(), заменено на clear()
-            return
-
-        model_mapping = {
-            'GPT 4o mini': 'gpt-4o-mini',
-        }
-
-        model_name = model_mapping.get(message.text)
-
-        if model_name:
-            g4f_bot.set_model(model_name)
-            await message.answer(
-                f"Вы выбрали {model_name}. Введите ваш запрос:",
-                reply_markup=get_dialog_keyboard()
-            )
-            await save_user_state(state, 'g4f_dialog')
-            await state.set_state(DialogStates.waiting_for_g4f_dialog)
-        else:
-            await message.answer("Неверный выбор модели. Попробуйте снова.")
+            await state.clear()
 
     @dp.message(lambda message: message.text == 'Текст-Текст')
     async def handle_ai_text_text(message: Message):
@@ -719,14 +569,6 @@ async def setup_handlers(bot):
         )
         await save_user_state(message.chat.id, 'photo')
         await state.set_state(DialogStates.waiting_for_photo)
-
-    @dp.message(Command('g4f'))
-    async def handle_g4f_command(message: types.Message, state: FSMContext):
-        """Запуск G4F по команде /g4f"""
-        chat_id = message.chat.id
-        g4f_bot.set_model("gpt-4o-mini")
-        await message.answer("Вы выбрали G4F. Введите ваш запрос:", reply_markup=get_dialog_keyboard())
-        await save_user_state(state, 'g4f_dialog')
 
     @dp.message(StateFilter(DialogStates.waiting_for_text_image))
     async def handle_text_image_selection(message: types.Message, state: FSMContext):
