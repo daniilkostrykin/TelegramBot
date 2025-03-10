@@ -7,12 +7,11 @@ import logging
 import os
 from src.handlers.mistral import register_mistral_handlers
 from src.handlers.gemini import register_gemini_handlers
-from z.config import ADMIN_ID, POPULAR_SITES, GEMINI_API_KEY, BOT_TOKEN, MISTRAL_API_KEY, TOGETHER_API_KEY
 import google.generativeai as genai
 from g4f.client import Client
 from deep_translator import GoogleTranslator
 from aiogram.types import Message
-from z.keyboards import *
+from src.keyboard.keyboards import *
 import psycopg2
 import json
 import traceback
@@ -26,16 +25,20 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from mistralai import Mistral
 import aiohttp
 import PIL.Image
-from src.models.dialog_state import DialogStates, dialog_manager
-from src.models.user_state import user_state_manager
+from src.states.dialog_state import DialogStates, dialog_manager
+from src.states.user_state import user_state_manager
 from src.database.db_manager import db_manager
 from src.admin.admin_handlers import setup_admin_handlers, send_admin_notification, send_keyboard_to_all_users
 from src.handlers.midjourney import register_midjourney_handlers
 from src.handlers.qwen import register_qwen_handlers
 from src.handlers.g4f import register_g4f_handlers
+from dotenv import load_dotenv
+import os
 
+load_dotenv() 
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # Константы для Qwen
-API_URL = "https://api.together.xyz/inference"
+API_URL = os.getenv('API_URL')
 
 # Инициализируем диспетчер с хранилищем состояний
 dp = Dispatcher(storage=MemoryStorage())

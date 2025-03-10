@@ -7,10 +7,10 @@ from aiogram.fsm.context import FSMContext
 from mistralai import Mistral
 import aiohttp
 from src.formaters.format import safe_send_message
-from src.models.dialog_state import DialogStates, dialog_manager
+from src.states.dialog_state import DialogStates, dialog_manager
 from src.database.db_manager import db_manager
-from z.keyboards import get_ai_selection_keyboard, get_dialog_keyboard, get_mistral_model_keyboard
-from src.models.user_state import user_state_manager
+from src.keyboard.keyboards import get_ai_selection_keyboard, get_dialog_keyboard, get_mistral_model_keyboard
+from src.states.user_state import user_state_manager
 from dotenv import load_dotenv  # Добавляем импорт
 
 logger = logging.getLogger(__name__)

@@ -33,7 +33,7 @@ class UserStateFilter(BaseFilter):
         Returns:
             bool: True если состояние соответствует, False в противном случае
         """
-        from z.bot_handlers import user_states  # Импортируем здесь во избежание циклических импортов
+        from handlers.bot_handlers import user_states  # Импортируем здесь во избежание циклических импортов
         return user_states.get(message.chat.id) == self.state_name
 
 

@@ -2,11 +2,18 @@ import logging
 from aiogram import types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from z.config import ADMIN_ID
 import json
-from src.models.user_state import user_state_manager
-from z.keyboards import get_main_keyboard
+from src.states.user_state import user_state_manager
+from src.keyboard.keyboards import get_main_keyboard
 import asyncio
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # загружаем переменные из .env
+admin_id = int(os.getenv('ADMIN_ID'))
+if admin_id is None:
+    raise ValueError("ADMIN_ID не установлен в .env файле")
+ADMIN_ID = int(admin_id)
 
 logger = logging.getLogger(__name__)
 

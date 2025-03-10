@@ -8,9 +8,9 @@ from aiogram.types import Message
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from src.formaters.format import safe_send_message
-from src.models.dialog_state import DialogStates
+from src.states.dialog_state import DialogStates
 from src.database.db_manager import db_manager
-from z.keyboards import get_ai_selection_keyboard, get_dialog_keyboard
+from src.keyboard.keyboards import get_ai_selection_keyboard, get_dialog_keyboard
 
 logger = logging.getLogger(__name__)
 

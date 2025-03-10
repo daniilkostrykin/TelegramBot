@@ -7,10 +7,10 @@ import logging
 from deep_translator import GoogleTranslator
 from aiogram.types import Message, BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from g4f.client import Client
-from z.keyboards import get_ai_selection_keyboard, get_dialog_keyboard
-from src.models.user_state import user_state_manager
+from src.keyboard.keyboards import get_ai_selection_keyboard, get_dialog_keyboard
+from src.states.user_state import user_state_manager
 from aiogram.fsm.context import FSMContext
-from src.models.dialog_state import DialogStates
+from src.states.dialog_state import DialogStates
 from aiogram import Dispatcher, F
 from aiogram.filters import Command, StateFilter
 from src.database.db_manager import db_manager

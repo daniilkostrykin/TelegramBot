@@ -7,10 +7,10 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from g4f.client import Client
 from src.formaters.format import safe_send_message
-from src.models.dialog_state import DialogStates
+from src.states.dialog_state import DialogStates
 from src.database.db_manager import db_manager
-from z.keyboards import get_main_keyboard, get_g4f_model_keyboard, get_dialog_keyboard, get_ai_selection_keyboard
-from src.models.user_state import user_state_manager
+from src.keyboard.keyboards import get_main_keyboard, get_g4f_model_keyboard, get_dialog_keyboard, get_ai_selection_keyboard
+from src.states.user_state import user_state_manager
 from aiogram import Dispatcher, Bot, types, F
 from asyncio import TimeoutError
 logger = logging.getLogger(__name__)

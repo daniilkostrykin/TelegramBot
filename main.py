@@ -8,8 +8,12 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.methods import DeleteWebhook
 from aiogram.fsm.storage.memory import MemoryStorage
-from z.bot_handlers import setup_handlers, dp
-from z.config import BOT_TOKEN
+from src.handlers.bot_handlers import setup_handlers, dp
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # загружаем переменные из .env
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 # Настройка логирования
 logging.basicConfig(
