@@ -28,6 +28,7 @@ from src.models.dialog_state import DialogStates, dialog_manager
 from src.models.user_state import user_state_manager
 from src.database.db_manager import db_manager
 from src.admin.admin_handlers import setup_admin_handlers, send_admin_notification, send_keyboard_to_all_users
+from src.handlers.midjourney import register_midjourney_handlers
 
 # Константы для Qwen
 API_URL = "https://api.together.xyz/inference"
@@ -128,6 +129,9 @@ user_states = {}  # {chat_id: [state1, state2, ...]}
 async def setup_handlers(bot):
     # Отправляем уведомление администратору при запуске
     await send_admin_notification(bot)
+
+    # Регистрируем обработчики Midjourney
+    register_midjourney_handlers(dp)
 
     # Настраиваем административные обработчики
     await setup_admin_handlers(dp, db_manager, dialog_sessions, active_generations)
@@ -721,85 +725,6 @@ async def setup_handlers(bot):
         await save_user_state(state, 'gemini_dialog')
         await state.set_state(DialogStates.waiting_for_dialog)
 
-    def translate_text(text, target_lang="en"):
-        return GoogleTranslator(source="auto", target=target_lang).translate(text)
-
-    @dp.message(lambda message: message.text == 'Midjourney')
-    async def handle_midjourney_choice(message: Message, state: FSMContext):
-        await message.answer(
-            "Вы выбрали Midjourney. Введите запрос для генерации изображения.",
-            reply_markup=get_dialog_keyboard()
-        )
-        user_states[message.chat.id] = 'midjourney_dialog'
-
-    @dp.message(lambda message: user_states.get(message.chat.id) == 'midjourney_dialog')
-    async def handle_midjourney(message: Message):
-        chat_id = message.chat.id
-        if message.text in ['⬅️ Назад', '⏹️ Завершить диалог']:
-            await message.answer(
-                "Возврат в меню нейросетей.",
-                reply_markup=get_ai_selection_keyboard()
-            )
-            user_states.pop(chat_id, None)
-            return
-
-        translated_text = translate_text(message.text)
-
-        loading_message = await message.answer("Генерация картинки...")
-
-        stop_event = threading.Event()
-        loading_thread = threading.Thread(
-            target=lambda: asyncio.run(
-                update_loading_message(loading_message, stop_event))
-        )
-        loading_thread.start()
-
-        start_time = time.time()
-
-        # 🖼️ Запрос к API для генерации картинки
-        client = Client()
-        response = client.images.generate(
-            model="flux",
-            prompt=translated_text,
-            response_format="url"
-        )
-
-        image_url = response.data[0].url
-        image_data = requests.get(image_url).content
-
-        stop_event.set()
-        loading_thread.join()
-
-        elapsed_time = round(time.time() - start_time, 2)
-
-        await dp.bot.edit_message_text(
-            chat_id=message.chat.id,
-            message_id=loading_message.message_id,
-            text=f"✅ Картинка сгенерирована за {elapsed_time} сек!"
-        )
-        await dp.bot.send_photo(message.chat.id, photo=image_data)
-
-    async def update_loading_message(message: Message, stop_event):
-        dots = ""
-        counter = 0
-
-        while not stop_event.is_set():
-            dots = "." * (counter % 4)
-            elapsed_time = counter
-            new_text = f"Генерация картинки{dots}\nГенерируется лишь: {elapsed_time} сек"
-
-            try:
-                await dp.bot.edit_message_text(
-                    chat_id=message.chat.id,
-                    message_id=message.message_id,
-                    text=new_text
-                )
-            except Exception:
-                pass
-
-            counter += 1
-            await asyncio.sleep(1)
-
     @dp.message(lambda message: message.text == 'Текст-Текст')
     async def handle_ai_text_text(message: Message):
         await message.answer(
@@ -933,16 +858,6 @@ async def setup_handlers(bot):
         g4f_bot.set_model("gpt-4o-mini")
         await message.answer("Вы выбрали G4F. Введите ваш запрос:", reply_markup=get_dialog_keyboard())
         await save_user_state(state, 'g4f_dialog')
-
-    @dp.message(Command('midjourney'))
-    async def handle_midjourney_command(message: types.Message, state: FSMContext):
-        """Запуск Midjourney по команде /midjourney"""
-        chat_id = message.chat.id
-        await message.answer("Вы выбрали Midjourney. Введите запрос для генерации изображения:",
-                             reply_markup=get_dialog_keyboard())
-        await save_user_state(state, 'midjourney_dialog')
-        # ИСПРАВЛЕНО
-        await state.set_state(DialogStates.waiting_for_midjourney)
 
     @dp.message(StateFilter(DialogStates.waiting_for_dialog))
     async def process_dialog_message(message: types.Message, state: FSMContext):
@@ -1336,51 +1251,6 @@ async def setup_handlers(bot):
         else:
             await message.answer("Пожалуйста, выберите сервис из предложенных вариантов.")
 
-    @dp.message(StateFilter(DialogStates.waiting_for_midjourney))
-    async def handle_midjourney_dialog(message: Message, state: FSMContext):
-        chat_id = message.chat.id
-
-        if message.text in ['⬅️ Назад', '⏹️ Завершить диалог']:
-            await message.answer(
-                "Возврат в меню нейросетей.",
-                reply_markup=get_ai_selection_keyboard()
-            )
-            await save_user_state(state, 'ai_selection')
-            await state.clear()
-            return
-        await db_manager.save_dialog_message(chat_id, "midjourney", "user", message.text)
-
-        translated_text = translate_text(message.text)
-        loading_message = await message.answer("Генерация картинки...")
-
-        try:
-            client = Client()
-            async with aiohttp.ClientSession() as session:
-                response = await client.images.async_generate(
-                    model="flux",
-                    prompt=translated_text,
-                    response_format="url"
-                )
-
-                image_url = response.data[0].url
-                async with session.get(image_url) as img_response:
-                    image_data = await img_response.read()
-
-                # Создаем InputFile из байтов изображения
-                from aiogram.types import BufferedInputFile
-                input_file = BufferedInputFile(
-                    file=image_data,
-                    filename="generated_image.png"
-                )
-
-                await loading_message.edit_text("✅ Картинка сгенерирована!")
-                # Используем InputFile для отправки фото
-                await message.answer_photo(photo=input_file)
-
-        except Exception as e:
-            await loading_message.edit_text(f"❌ Ошибка при генерации изображения: {str(e)}")
-            logger.error(f"Error in Midjourney generation: {str(e)}")
-                
     def get_qwen_response_stream(messages):
         if not TOGETHER_API_KEY:
             raise ValueError("TOGETHER_API_KEY не настроен в .env файле")
