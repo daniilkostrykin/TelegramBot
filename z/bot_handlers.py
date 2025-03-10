@@ -5,6 +5,7 @@ import time
 import requests
 import logging
 import os
+from src.handlers.gemini import register_gemini_handlers
 from z.config import ADMIN_ID, POPULAR_SITES, GEMINI_API_KEY, BOT_TOKEN, MISTRAL_API_KEY, TOGETHER_API_KEY
 import google.generativeai as genai
 from g4f.client import Client
@@ -133,6 +134,7 @@ async def setup_handlers(bot):
     # Регистрируем обработчики Midjourney
     register_midjourney_handlers(dp)
 
+    register_gemini_handlers(dp)
     # Настраиваем административные обработчики
     await setup_admin_handlers(dp, db_manager, dialog_sessions, active_generations)
 
@@ -331,60 +333,6 @@ async def setup_handlers(bot):
                           for i in range(0, len(text), MAX_LENGTH)]
             for part in text_parts:
                 await message.answer(part)
-
-    async def handle_dialog(message: types.Message, state: FSMContext, model_name: str, test_query: str = None):
-        chat_id = message.chat.id
-        try:
-            if message.text == '⏹️ Завершить диалог':
-                await message.answer(
-                    "Диалог завершен.",
-                    reply_markup=get_ai_selection_keyboard()
-                )
-                dialog_manager.clear_dialog_history(chat_id, model_name)
-                await save_user_state(state, 'ai_selection')
-                await state.clear()
-                return
-
-            query = test_query if test_query else message.text
-            await db_manager.save_dialog_message(chat_id, model_name, "user", query)
-
-            sent_message = await message.answer("Генерация ответа...")
-            dialog_manager.set_active_generation(chat_id, True)
-
-            try:
-                model = genai.GenerativeModel(model_name)
-                messages = await db_manager.get_dialog_history(chat_id, model_name)
-                print(
-                    f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
-
-                response = await asyncio.to_thread(model.generate_content, messages)
-                response_text = response.text
-                await db_manager.save_dialog_message(chat_id, model_name, "model", response_text)
-
-                await safe_send_message(message, response_text)
-                await sent_message.delete()
-
-                # Сохраняем состояние для следующего сообщения
-                await state.set_state(DialogStates.waiting_for_dialog)
-                await save_user_state(state, model_name)
-
-            except Exception as e:
-                logger.error(
-                    f"Ошибка генерации контента: {type(e).__name__} - {str(e)}")
-                await message.answer(
-                    f"Произошла ошибка генерации контента: {str(e)}\nПожалуйста, попробуйте снова."
-                )
-                # Сохраняем состояние для следующего сообщения
-                await state.set_state(DialogStates.waiting_for_dialog)
-                await save_user_state(state, model_name)
-
-        except Exception as e:
-            logger.error(
-                f"Ошибка в диалоге Gemini: {type(e).__name__} - {str(e)}\n{traceback.format_exc()}"
-            )
-            await message.answer(f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте снова.")
-            await state.set_state(DialogStates.waiting_for_dialog)
-            await save_user_state(state, model_name)
 
     async def handle_g4f_dialog(message: types.Message, state: FSMContext):
         chat_id = message.chat.id
@@ -672,59 +620,6 @@ async def setup_handlers(bot):
         else:
             await message.answer("Неверный выбор модели. Попробуйте снова.")
 
-    @dp.callback_query(F.data.startswith("stop_"))
-    async def stop_generation(call: types.CallbackQuery):
-        chat_id = int(call.data.split("_")[1])
-        active_generations[chat_id] = False
-        await call.message.edit_text("⏹️ Генерация остановлена.")
-
-    @dp.message(StateFilter(DialogStates.waiting_for_model_selection))
-    async def handle_model_selection(message: types.Message, state: FSMContext):
-        chat_id = message.chat.id
-        model_name = None
-
-        if message.text == '⬅️ Назад':
-            await message.answer(
-                "Возврат в меню выбора AI.",
-                reply_markup=get_ai_selection_keyboard()
-            )
-            await save_user_state(state, 'ai_selection')
-            await state.clear()  # Очищаем состояние FSM
-            return
-
-        # Очищаем предыдущие состояния и истории диалогов
-        if chat_id in dialog_sessions:
-            dialog_sessions.pop(chat_id, None)
-        if chat_id in g4f_dialog_sessions:
-            g4f_dialog_sessions.pop(chat_id, None)
-
-        # Маппинг моделей
-        model_mapping = {
-            'Gemini 2.0 Experimental': 'gemini-2.0-flash-exp',
-            'Gemini 1.5 Pro': 'gemini-1.5-pro',
-            'Gemini 1.5 Flash': 'gemini-1.5-flash',
-            'Gemini 2.0 Pro Experimental 02-05': 'gemini-2.0-pro-exp-02-05',
-            'Gemini 2.0 Flash Thinking Experimental 01-21': 'gemini-2.0-flash-thinking-exp-01-21',
-            'Gemini 2.0 Flash-Lite Preview 02-05': 'gemini-2.0-flash-lite-preview-02-05',
-            'Gemini 2.0 Flash': 'gemini-2.0-flash'
-        }
-
-        model_name = model_mapping.get(message.text)
-
-        if not model_name:
-            await message.answer("Неверный выбор модели. Попробуйте снова.")
-            return
-
-        # Сохраняем выбранную модель в состояние
-        await state.update_data(model_name=model_name)
-
-        await message.answer(
-            f"Вы выбрали: {model_name}. Начните диалог.",
-            reply_markup=get_dialog_keyboard()
-        )
-        await save_user_state(state, 'gemini_dialog')
-        await state.set_state(DialogStates.waiting_for_dialog)
-
     @dp.message(lambda message: message.text == 'Текст-Текст')
     async def handle_ai_text_text(message: Message):
         await message.answer(
@@ -836,21 +731,6 @@ async def setup_handlers(bot):
         await save_user_state(state, 'mistral_dialog')
         await state.set_state(DialogStates.waiting_for_mistral_dialog)
 
-    @dp.message(Command('gemini'))
-    async def handle_gemini_command(message: types.Message, state: FSMContext):
-        """Запуск Gemini по команде /gemini"""
-        chat_id = message.chat.id
-        # Устанавливаем модель по умолчанию
-        model_name = 'gemini-2.0-flash-exp'
-
-        # Сохраняем модель в состояние
-        await state.update_data(model_name=model_name)
-
-        await message.answer("Вы выбрали Gemini.\nВведите запрос:", reply_markup=get_dialog_keyboard())
-        await save_user_state(state, 'gemini_dialog')
-        # Устанавливаем состояние ожидания диалога
-        await state.set_state(DialogStates.waiting_for_dialog)  # ИСПРАВЛЕНО
-
     @dp.message(Command('g4f'))
     async def handle_g4f_command(message: types.Message, state: FSMContext):
         """Запуск G4F по команде /g4f"""
@@ -858,95 +738,6 @@ async def setup_handlers(bot):
         g4f_bot.set_model("gpt-4o-mini")
         await message.answer("Вы выбрали G4F. Введите ваш запрос:", reply_markup=get_dialog_keyboard())
         await save_user_state(state, 'g4f_dialog')
-
-    @dp.message(StateFilter(DialogStates.waiting_for_dialog))
-    async def process_dialog_message(message: types.Message, state: FSMContext):
-        """Обработчик сообщений в состоянии диалога с Gemini"""
-        logger.info(
-            f"process_dialog_message вызван: chat_id={message.chat.id}, текст={message.text}")
-        data = await state.get_data()
-        logger.info(f"Данные состояния: {data}")
-        model_name = data.get('model_name')
-        logger.info(f"Выбранная модель: {model_name}")
-
-        if not model_name:
-            model_name = 'gemini-2.0-flash-exp'
-            logger.warning(
-                f"Модель не найдена в состоянии, используем {model_name}")
-
-        # Проверяем, есть ли изображения в сообщении
-        if message.photo or message.media_group_id:
-            try:
-                images = []
-                temp_files = []
-
-                if message.media_group_id:
-                    # Получаем все фото из группы
-                    media_group = message.photo
-                    for i, photo in enumerate(media_group):
-                        file_info = await message.bot.get_file(photo.file_id)
-                        downloaded_file = await message.bot.download_file(file_info.file_path)
-
-                        # Создаем уникальное имя файла для каждого изображения
-                        temp_filename = f"temp_image_{message.chat.id}_{i}.jpg"
-                        temp_files.append(temp_filename)
-
-                        with open(temp_filename, "wb") as new_file:
-                            new_file.write(downloaded_file.read())
-
-                        img = PIL.Image.open(temp_filename)
-                        images.append(img)
-                else:
-                    # Обработка одиночного изображения
-                    photo = message.photo[-1]
-                    file_info = await message.bot.get_file(photo.file_id)
-                    downloaded_file = await message.bot.download_file(file_info.file_path)
-
-                    temp_filename = f"temp_image_{message.chat.id}_0.jpg"
-                    temp_files.append(temp_filename)
-
-                    with open(temp_filename, "wb") as new_file:
-                        new_file.write(downloaded_file.read())
-
-                    img = PIL.Image.open(temp_filename)
-                    images.append(img)
-
-                # Если есть текст с изображениями
-                prompt = message.caption if message.caption else "Опишите эти изображения"
-
-                # Создаем модель и генерируем ответ
-                model = genai.GenerativeModel(model_name)
-
-                # Формируем запрос с изображениями
-                request = [prompt] + images
-                response = await asyncio.to_thread(model.generate_content, request)
-
-                # Удаляем временные файлы
-                for temp_file in temp_files:
-                    try:
-                        os.remove(temp_file)
-                    except Exception as e:
-                        logger.warning(
-                            f"Не удалось удалить временный файл {temp_file}: {e}")
-
-                # Отправляем ответ
-                await safe_send_message(message, response.text)
-
-            except Exception as e:
-                logger.error(f"Ошибка при обработке изображения: {e}")
-                await message.answer(f"Произошла ошибка при обработке изображения: {str(e)}")
-
-                # Пытаемся удалить временные файлы в случае ошибки
-                for temp_file in temp_files:
-                    try:
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
-                    except Exception as e:
-                        logger.warning(
-                            f"Не удалось удалить временный файл {temp_file}: {e}")
-        else:
-            # Обычная обработка текстового сообщения
-            await handle_dialog(message, state, model_name)
 
     # Обработчик для диалога с Mistral
     @dp.message(StateFilter(DialogStates.waiting_for_mistral_dialog))
@@ -1389,3 +1180,4 @@ async def setup_handlers(bot):
 
 # Инициализация Mistral AI клиента
 mistral_client = Mistral(api_key=MISTRAL_API_KEY)
+ 
