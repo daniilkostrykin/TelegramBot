@@ -26,7 +26,7 @@ import aiohttp
 import PIL.Image
 from src.models.dialog_state import DialogStates, dialog_manager
 from src.models.user_state import user_state_manager
-from z.db_manager import db_manager
+from src.database.db_manager import db_manager
 from src.admin.admin_handlers import setup_admin_handlers, send_admin_notification, send_keyboard_to_all_users
 
 # Константы для Qwen
@@ -1338,6 +1338,8 @@ async def setup_handlers(bot):
 
     @dp.message(StateFilter(DialogStates.waiting_for_midjourney))
     async def handle_midjourney_dialog(message: Message, state: FSMContext):
+        chat_id = message.chat.id
+
         if message.text in ['⬅️ Назад', '⏹️ Завершить диалог']:
             await message.answer(
                 "Возврат в меню нейросетей.",
@@ -1346,6 +1348,7 @@ async def setup_handlers(bot):
             await save_user_state(state, 'ai_selection')
             await state.clear()
             return
+        await db_manager.save_dialog_message(chat_id, "midjourney", "user", message.text)
 
         translated_text = translate_text(message.text)
         loading_message = await message.answer("Генерация картинки...")
