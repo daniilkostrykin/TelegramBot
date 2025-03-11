@@ -143,6 +143,7 @@ async def handle_dialog(message: Message, state: FSMContext):
         await state.set_state(DialogStates.waiting_for_dialog)
         await save_user_state(state, model_name)
 
+
 async def process_dialog_message(message: Message, state: FSMContext):
     """Обработчик сообщений в состоянии диалога с Gemini"""
     logger.info(

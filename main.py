@@ -42,12 +42,15 @@ async def start_bot():
         await dp.start_polling(bot)
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
-        sys.exit(1)
+        # Не завершаем работу при ошибке БД
+        if "database" not in str(e).lower():
+            sys.exit(1)
+        logger.info("Продолжаем работу без базы данных")
 
 
 async def main():
     """Основная функция для запуска бота."""
-    global is_running 
+    global is_running
 
     logger.info("Бот запущен. Чтобы остановить бота, нажмите Ctrl+C.")
 
@@ -63,7 +66,10 @@ async def main():
         logger.error(f"Критическая ошибка: {e}")
         is_running = False
         await bot.session.close()
-        sys.exit(1)
+        # Не завершаем работу при ошибке БД
+        if "database" not in str(e).lower():
+            sys.exit(1)
+        logger.info("Продолжаем работу без базы данных")
 
 if __name__ == "__main__":
     try:

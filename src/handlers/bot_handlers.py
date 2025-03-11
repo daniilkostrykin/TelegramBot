@@ -35,49 +35,13 @@ from src.handlers.g4f import register_g4f_handlers
 from dotenv import load_dotenv
 import os
 
-load_dotenv() 
+load_dotenv()
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # Константы для Qwen
 API_URL = os.getenv('API_URL')
 
 # Инициализируем диспетчер с хранилищем состояний
 dp = Dispatcher(storage=MemoryStorage())
-
-# Получаем URL базы данных из переменной окружения, если она есть
-DATABASE_URL = os.environ.get("DB_URL")
-RAILWAY_DB_URL = "postgresql://postgres:tocutLkkpvyyDLmYnEPZrrovLcTbjFvA@postgres.railway.internal:5432/railway"
-LOCAL_DB_URL = "postgresql://postgres:postgres@localhost:5433/postgres"
-
-conn = None
-
-try:
-    if DATABASE_URL:
-        print(f"Попытка подключения к удаленной базе: {DATABASE_URL}")
-        conn = psycopg2.connect(DATABASE_URL)
-    else:
-        raise psycopg2.OperationalError(
-            "Переменная окружения DB_URL не задана, пробуем Railway...")
-
-except psycopg2.Error as e:
-    print(f"Ошибка при подключении к {DATABASE_URL}: {e}. Пробуем Railway...")
-
-    try:
-        conn = psycopg2.connect(RAILWAY_DB_URL)
-        print("Успешно подключено к Railway!")
-    except psycopg2.Error as e:
-        print(
-            f"Ошибка при подключении к Railway: {e}. Пробуем локальную базу...")
-
-        try:
-            conn = psycopg2.connect(LOCAL_DB_URL)
-            print("Переключено на локальную базу данных!")
-        except psycopg2.Error as e:
-            print(
-                f"Ошибка при подключении к локальной базе данных: {e}. Программа завершена.")
-            exit(1)
-
-cursor = conn.cursor()
-print("Подключение успешно!")
 
 
 # Добавляем функцию для сохранения пользователя в базу данных

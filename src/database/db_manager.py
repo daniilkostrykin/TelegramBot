@@ -13,17 +13,24 @@ class DatabaseManager:
         self.conn = None
         self.cursor = None
         self.dialog_sessions = {}  # Локальный кэш для диалогов
-        self._connect()
+        self.is_connected = False  # Флаг подключения к БД
+        try:
+            self._connect()
+            self.is_connected = True
 
-        # Создаем таблицу для хранения последних сообщений
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS last_messages (
-                chat_id BIGINT PRIMARY KEY,
-                message_id BIGINT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        self.conn.commit()
+            # Создаем таблицу только если есть подключение
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS last_messages (
+                    chat_id BIGINT PRIMARY KEY,
+                    message_id BIGINT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации БД: {e}")
+            self.is_connected = False
+            # Продолжаем работу без БД, используя только кэш
 
     def _connect(self):
         """Устанавливает соединение с базой данных"""
@@ -63,6 +70,9 @@ class DatabaseManager:
 
     async def save_user(self, chat_id: int, username: str, first_name: str, last_name: str) -> None:
         """Сохраняет или обновляет информацию о пользователе"""
+        if not self.is_connected:
+            return
+
         try:
             self.cursor.execute("""
                 INSERT INTO users (chat_id, username, first_name, last_name)
@@ -77,7 +87,6 @@ class DatabaseManager:
             self.conn.commit()
         except Exception as e:
             logger.error(f"Ошибка при сохранении пользователя: {e}")
-            raise
 
     async def get_all_users(self) -> List[int]:
         """Получает список всех chat_id пользователей"""
@@ -111,24 +120,18 @@ class DatabaseManager:
             f"[LOG] save_dialog_message вызван с: chat_id={chat_id}, ai_name={ai_name}, role={role}, content={content}"
         )
 
-        # Проверяем, есть ли диалог в памяти
+        # Сохраняем в локальный кэш всегда
         dialog_key = (chat_id, ai_name)
         if dialog_key not in self.dialog_sessions:
-            print(
-                f"[LOG] dialog_sessions НЕ содержит {dialog_key}. Создаю новый ключ."
-            )
             self.dialog_sessions[dialog_key] = []
 
-        # Добавляем сообщение в локальный кэш
-        try:
-            self.dialog_sessions[dialog_key].append(
-                {"role": role, "parts": [content]}
-            )
-        except KeyError as e:
-            print(f"[CRITICAL ERROR] KeyError при добавлении сообщения! {e}")
-            raise
+        self.dialog_sessions[dialog_key].append(
+            {"role": role, "parts": [content]})
 
-        # Сохраняем в БД
+        # Сохраняем в БД только если есть подключение
+        if not self.is_connected:
+            return
+
         try:
             # Получаем текущую историю
             self.cursor.execute(
@@ -170,7 +173,6 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Ошибка при сохранении сообщения диалога: {e}")
             print(traceback.format_exc())
-            raise
 
     async def get_dialog_history(self, chat_id: int, ai_name: str) -> List[dict]:
         """
@@ -242,6 +244,9 @@ class DatabaseManager:
 
     async def update_last_message(self, chat_id: int, message_id: int):
         """Сохраняет ID последнего сообщения бота"""
+        if not self.is_connected:
+            return
+
         try:
             self.cursor.execute("""
                 INSERT INTO last_messages (chat_id, message_id) 
@@ -256,6 +261,9 @@ class DatabaseManager:
 
     async def get_last_message(self, chat_id: int) -> int | None:
         """Получает ID последнего сообщения бота"""
+        if not self.is_connected:
+            return None
+
         try:
             self.cursor.execute(
                 "SELECT message_id FROM last_messages WHERE chat_id = %s",
