@@ -32,3 +32,5 @@ wheels/
 
 # Other
 other/
+.ipynb_checkpoints/
+assets/
