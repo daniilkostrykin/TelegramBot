@@ -34,6 +34,7 @@ from src.handlers.qwen import register_qwen_handlers
 from src.handlers.g4f import register_g4f_handlers
 from dotenv import load_dotenv
 import os
+from src.handlers.deepseek import register_deepseek_handlers
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
@@ -128,6 +129,8 @@ async def setup_handlers(bot):
 
     register_g4f_handlers(dp)
 
+    register_deepseek_handlers(dp)
+
     # Настраиваем административные обработчики
     await setup_admin_handlers(dp, db_manager, dialog_sessions, active_generations)
 
@@ -180,7 +183,8 @@ async def setup_handlers(bot):
             'appearance': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'photo': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'midjourney_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
-            'mistral_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI.")
+            'mistral_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'deepseek_dialog': ('main_menu', get_main_keyboard(), "Возврат в главное меню.")
         }
 
         if current_state in state_transitions:
@@ -229,7 +233,7 @@ async def setup_handlers(bot):
         )
         await save_user_state(message.chat.id, 'ai_selection')
 
-    @dp.message(F.text.in_(['ChatGPT', 'Gemini', 'Microsoft Copilot', 'Github Copilot', 'Mistral AI', 'Qwen']))
+    @dp.message(F.text.in_(['ChatGPT', 'Gemini', 'Microsoft Copilot', 'Github Copilot', 'Mistral AI', 'Qwen', 'DeepSeek']))
     async def handle_ai_choice(message: types.Message, state: FSMContext):
         chat_id = message.chat.id
 
@@ -261,6 +265,17 @@ async def setup_handlers(bot):
                 reply_markup=get_dialog_keyboard()
             )
             await state.set_state(DialogStates.waiting_for_qwen_dialog)
+
+        elif message.text == 'DeepSeek':
+            await message.answer(
+                "Вы выбрали DeepSeek AI.",
+                reply_markup=types.ReplyKeyboardMarkup(
+                    keyboard=[[types.KeyboardButton(text="⬅️ Назад")]],
+                    resize_keyboard=True
+                )
+            )
+            await save_user_state(state, 'deepseek_dialog')
+            await state.set_state(DialogStates.deepseek_dialog)
 
         elif message.text == '⬅️ Назад':
             await message.answer(

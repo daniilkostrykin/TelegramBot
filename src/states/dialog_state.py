@@ -25,6 +25,7 @@ class DialogStates(StatesGroup):
     waiting_for_appearance = State()
     waiting_for_photo = State()
     waiting_for_midjourney = State()
+    deepseek_dialog = State()
 
 
 class DialogSessionManager:
