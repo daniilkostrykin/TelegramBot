@@ -1,4 +1,3 @@
----
 
 # 🚀 Telegram AI Bot  
 
