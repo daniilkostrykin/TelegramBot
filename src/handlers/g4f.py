@@ -9,7 +9,7 @@ from g4f.client import Client
 from src.formaters.format import safe_send_message
 from src.states.dialog_state import DialogStates
 from src.database.db_manager import db_manager
-from src.keyboard.keyboards import get_main_keyboard, get_g4f_model_keyboard, get_dialog_keyboard, get_ai_selection_keyboard
+from src.keyboard.keyboards import get_ai_selection_keyboard, get_g4f_model_keyboard, get_dialog_keyboard, get_ai_selection_keyboard
 from src.states.user_state import user_state_manager
 from aiogram import Dispatcher, Bot, types, F
 from asyncio import TimeoutError
@@ -56,7 +56,7 @@ async def save_user_state(state_or_chat_id, new_state: str):
 
 
 async def handle_g4f_command(message: Message, state: FSMContext):
-    #print(f"[DEBUG] handle_g4f_command: {message.text}")
+    # print(f"[DEBUG] handle_g4f_command: {message.text}")
     g4f_bot.set_model("gpt-4o-mini")
     await message.answer("Вы выбрали G4F. Введите ваш запрос:", reply_markup=get_dialog_keyboard())
     # await save_user_state(state, 'g4f_dialog')
@@ -121,7 +121,7 @@ async def handle_g4f_dialog(message: Message, state: FSMContext):
     if message.text == '⏹️ Завершить диалог':
         await message.answer(
             "Диалог завершен.",
-            reply_markup=get_main_keyboard()
+            reply_markup=get_ai_selection_keyboard()
         )
         if chat_id in g4f_dialog_sessions:
             del g4f_dialog_sessions[chat_id]

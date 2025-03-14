@@ -5,9 +5,10 @@ from aiogram.fsm.context import FSMContext
 import requests
 
 from src.states.dialog_state import DialogStates
-from src.keyboard.keyboards import get_ai_io_net_keyboard, get_ai_io_net_model_keyboard, get_ai_selection_keyboard
+from src.keyboard.keyboards import get_ai_io_net_keyboard, get_ai_io_net_model_keyboard, get_ai_selection_keyboard, get_dialog_keyboard
 from src.handlers.ai_io_get_models import get_models_by_category
 from src.formaters.format import safe_send_message
+from src.database.db_manager import db_manager
 
 from dotenv import load_dotenv
 import os
@@ -65,6 +66,8 @@ def register_ai_io_net_handlers(dp: Dispatcher):
 
     @dp.message(DialogStates.ai_io_net_chat)
     async def handle_chat(message: Message, state: FSMContext):
+        chat_id = message.chat.id
+
         if message.text == "⬅️ Назад":
             await message.answer("Выберите категорию моделей:", reply_markup=get_ai_io_net_keyboard())
             await state.set_state(DialogStates.ai_io_net_category)
@@ -76,7 +79,12 @@ def register_ai_io_net_handlers(dp: Dispatcher):
             if message.text in category_models:
                 selected_model = message.text
                 await state.update_data(selected_model=selected_model)
-                await message.answer(f"Модель {selected_model} выбрана. Отправьте ваше сообщение.")
+                await message.answer(
+                    f"Модель {selected_model} выбрана. Отправьте ваше сообщение.",
+                    reply_markup=get_dialog_keyboard()
+                )
+                # Сохраняем начало диалога в БД
+                await db_manager.save_dialog_message(chat_id, selected_model, "system", f"Диалог начат с моделью {selected_model}")
                 return
 
         # Если это не выбор модели, обрабатываем как запрос к API
@@ -94,6 +102,12 @@ def register_ai_io_net_handlers(dp: Dispatcher):
             )
             await state.set_state(DialogStates.ai_io_net_category)
             return
+
+        # Сохраняем сообщение пользователя в БД
+        await db_manager.save_dialog_message(chat_id, selected_model, "user", message.text)
+
+        # Отправляем сообщение о генерации
+        loading_message = await message.answer("Генерация ответа...")
 
         url = "https://api.intelligence.io.solutions/api/v1/chat/completions"
         headers = {
@@ -116,12 +130,19 @@ def register_ai_io_net_handlers(dp: Dispatcher):
             response.raise_for_status()
             response_data = response.json()
 
+            # Удаляем сообщение о генерации
+            await loading_message.delete()
+
             if 'error' in response_data:
-                await message.answer(f"Произошла ошибка при обращении к API: {response_data['error']}")
+                error_message = f"Произошла ошибка при обращении к API: {response_data['error']}"
+                await message.answer(error_message)
+                await db_manager.save_dialog_message(chat_id, selected_model, "error", error_message)
                 return
 
             if 'choices' not in response_data or not response_data['choices']:
-                await message.answer("Извините, не удалось получить ответ от нейросети. Попробуйте позже.")
+                error_message = "Извините, не удалось получить ответ от нейросети. Попробуйте позже."
+                await message.answer(error_message)
+                await db_manager.save_dialog_message(chat_id, selected_model, "error", error_message)
                 return
 
             text = response_data['choices'][0]['message']['content']
@@ -130,13 +151,21 @@ def register_ai_io_net_handlers(dp: Dispatcher):
             else:
                 bot_text = text
 
+            # Сохраняем ответ модели в БД
+            await db_manager.save_dialog_message(chat_id, selected_model, "assistant", bot_text)
             await safe_send_message(message, bot_text)
 
         except requests.exceptions.RequestException as e:
-            await message.answer(f"Ошибка при обращении к API: {str(e)}")
+            error_message = f"Ошибка при обращении к API: {str(e)}"
+            await loading_message.delete()
+            await message.answer(error_message)
+            await db_manager.save_dialog_message(chat_id, selected_model, "error", error_message)
             logging.error(f"API request error: {str(e)}")
         except Exception as e:
-            await message.answer("Произошла внутренняя ошибка. Попробуйте позже.")
+            error_message = "Произошла внутренняя ошибка. Попробуйте позже."
+            await loading_message.delete()
+            await message.answer(error_message)
+            await db_manager.save_dialog_message(chat_id, selected_model, "error", error_message)
             logging.error(f"Internal error: {str(e)}")
 
     return dp

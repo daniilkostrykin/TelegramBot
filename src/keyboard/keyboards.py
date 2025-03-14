@@ -25,49 +25,35 @@ def get_computer_keyboard():
 
 def get_dialog_keyboard():  # Клавиатура для режима диалога
     keyboard = [
-        [KeyboardButton(text='⏹️ Завершить диалог')],
-        [KeyboardButton(text='⬅️ Назад')]
+        [KeyboardButton(text='⏹️ Завершить диалог'),
+         KeyboardButton(text='⬅️ Назад')]
     ]
     markup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
     return markup
 
 
 def get_ai_selection_keyboard():
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text="ChatGPT"),
-                KeyboardButton(text="Gemini")
-            ],
-            [
-                KeyboardButton(text="Microsoft Copilot"),
-                KeyboardButton(text="Github Copilot")
-            ],
-            [
-                KeyboardButton(text="Mistral AI"),
-                KeyboardButton(text="Qwen")
-            ],
-            [
-                KeyboardButton(text="DeepSeek"),
-                KeyboardButton(text="AI.IO.NET")
-            ],
-            [
-                KeyboardButton(text="⬅️ Назад")
-            ]
-        ],
-        resize_keyboard=True
-    )
-    return keyboard
+    keyboard = [
+        [KeyboardButton(text="Текст-Текст"),
+         KeyboardButton(text="Текст-Изображение")],
+        [KeyboardButton(text="Текст-Голос"), KeyboardButton(text="NoCode")],
+        [KeyboardButton(text="Внешность"), KeyboardButton(text="Фото")],
+        [KeyboardButton(text="⬅️ Назад")]
+    ]
+    markup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    return markup
 
 
 def get_text_text_button():
     keyboard = [
-        [KeyboardButton(text="ChatGPT🌐", web_app=WebAppInfo(url="https://chatgpt.com/")),
-         KeyboardButton(text="Gemini")],
+        [KeyboardButton(text="Gemini")],
         [KeyboardButton(text="G4F (Аналог ChatGPT)"),
          KeyboardButton(text="Mistral AI"), KeyboardButton(text="Qwen")],
-        [KeyboardButton(text="DeepSeek"), KeyboardButton(text="Microsoft Copilot🌐", web_app=WebAppInfo(
-            url="https://copilot.microsoft.com/"))],
+        [KeyboardButton(text="AI.IO.NET")],
+        [KeyboardButton(text="DeepSeek")],
+        [KeyboardButton(text="ChatGPT🌐", web_app=WebAppInfo(url="https://chatgpt.com/")),
+         KeyboardButton(text="Microsoft Copilot🌐", web_app=WebAppInfo(
+             url="https://copilot.microsoft.com/"))],
         [KeyboardButton(text="Github Copilot🌐", web_app=WebAppInfo(
             url="https://github.com/copilot"))],
         [KeyboardButton(text="⬅️ Назад")]

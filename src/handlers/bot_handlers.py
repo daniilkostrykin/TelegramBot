@@ -80,7 +80,7 @@ async def send_keyboard_to_all_users(bot, db_manager):
                         await bot.edit_message_reply_markup(
                             chat_id=chat_id,
                             message_id=last_message_id,
-                            reply_markup=get_main_keyboard()
+                            reply_markup=get_ai_selection_keyboard()
                         )
                         continue  # Если успешно, переходим к следующему пользователю
                     except Exception as e:
@@ -90,7 +90,7 @@ async def send_keyboard_to_all_users(bot, db_manager):
                 message = await bot.send_message(
                     chat_id=chat_id,
                     text="Бот был перезапущен",
-                    reply_markup=get_main_keyboard()
+                    reply_markup=get_ai_selection_keyboard()
                 )
                 # Сохраняем ID нового сообщения
                 await db_manager.update_last_message(chat_id, message.message_id)
@@ -152,8 +152,8 @@ async def setup_handlers(bot):
                 "- Работа с текстом (генерация, перевод, суммаризация)\n"
                 "- Генерация изображений\n"
                 "- Доступ к различным AI-моделям (Gemini, G4F, ChatGPT и др.)\n\n"
-                "Чтобы начать, выберите пункт в меню.",
-                reply_markup=get_main_keyboard()
+                "Чтобы начать, выберите категорию:",
+                reply_markup=get_ai_selection_keyboard()
             )
             # Сохраняем ID отправленного сообщения
             await db_manager.update_last_message(message.chat.id, sent_message.message_id)
@@ -176,7 +176,7 @@ async def setup_handlers(bot):
         state_transitions = {
             'gemini_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'g4f_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
-            'ai_selection': ('main_menu', get_main_keyboard(), "Возврат в главное меню."),
+            'ai_selection': ('main_menu', get_ai_selection_keyboard(), "Возврат в главное меню."),
             'text_text': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'text_image': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'text_voice': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
@@ -188,7 +188,7 @@ async def setup_handlers(bot):
             'photo': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'midjourney_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'mistral_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
-            'deepseek_dialog': ('main_menu', get_main_keyboard(), "Возврат в главное меню."),
+            'deepseek_dialog': ('main_menu', get_ai_selection_keyboard(), "Возврат в главное меню."),
             'ai_io_net_category': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'ai_io_net_chat': ('ai_io_net_category', get_ai_io_net_keyboard(), "Возврат к выбору категории моделей.")
         }
@@ -202,7 +202,7 @@ async def setup_handlers(bot):
                 await state.clear()
         else:
             # Если состояние не определено, возвращаемся в главное меню
-            await message.answer("Возврат в главное меню.", reply_markup=get_main_keyboard())
+            await message.answer("Возврат в главное меню.", reply_markup=get_ai_selection_keyboard())
             await save_user_state(state, 'main_menu')
             await state.clear()
 
