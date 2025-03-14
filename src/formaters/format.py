@@ -25,6 +25,7 @@ def process_code_block(text: str) -> list:
 
     return parts if parts else [(text, False)]
 
+
 def to_markdown(text: str) -> str:
     """
     Преобразует текст в формат Markdown для Telegram.
@@ -54,7 +55,7 @@ def to_markdown(text: str) -> str:
 
     # Сохраняем маркеры списка, заменяя их временно
     text = re.sub(r'^(\s*)\*(\s+)', r'\1§LIST§\2',
-                    text, flags=re.MULTILINE)
+                  text, flags=re.MULTILINE)
 
     # Обрабатываем двойные звездочки (обычный жирный текст)
     text = re.sub(r'\*\*(.*?)\*\*', save_bold, text, flags=re.DOTALL)
@@ -92,6 +93,7 @@ def to_markdown(text: str) -> str:
 
     return text
 
+
 async def safe_send_message(message: types.Message, text: str):
     MAX_LENGTH = 3500
     try:
@@ -120,7 +122,7 @@ async def safe_send_message(message: types.Message, text: str):
 
                 # Разбиваем длинный код на части
                 code_parts = [content[i:i + MAX_LENGTH]
-                                for i in range(0, len(content), MAX_LENGTH)]
+                              for i in range(0, len(content), MAX_LENGTH)]
                 for code_part in code_parts:
                     try:
                         await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
@@ -171,6 +173,6 @@ async def safe_send_message(message: types.Message, text: str):
         print(f"Ошибка форматирования: {e}")
         # Если произошла ошибка форматирования, разбиваем текст на части и отправляем без форматирования
         text_parts = [text[i:i + MAX_LENGTH]
-                        for i in range(0, len(text), MAX_LENGTH)]
+                      for i in range(0, len(text), MAX_LENGTH)]
         for part in text_parts:
             await message.answer(part)

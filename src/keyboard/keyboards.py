@@ -48,7 +48,8 @@ def get_ai_selection_keyboard():
                 KeyboardButton(text="Qwen")
             ],
             [
-                KeyboardButton(text="DeepSeek")
+                KeyboardButton(text="DeepSeek"),
+                KeyboardButton(text="AI.IO.NET")
             ],
             [
                 KeyboardButton(text="⬅️ Назад")
@@ -156,4 +157,30 @@ def get_mistral_model_keyboard():
         [KeyboardButton(text='⬅️ Назад')]
     ]
     markup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    return markup
+
+
+def get_ai_io_net_keyboard():
+    keyboard = [
+        [KeyboardButton(text='DeepSeek модели'),
+         KeyboardButton(text='Qwen модели')],
+        [KeyboardButton(text='Mistral модели'),
+         KeyboardButton(text='LLaMA модели')],
+        [KeyboardButton(text='Другие модели')],
+        [KeyboardButton(text='⬅️ Назад')]
+    ]
+    markup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    return markup
+
+
+def get_ai_io_net_model_keyboard(models: list):
+    buttons = []
+    for i in range(0, len(models), 2):
+        row = [KeyboardButton(text=models[i])]
+        if i + 1 < len(models):
+            row.append(KeyboardButton(text=models[i + 1]))
+        buttons.append(row)
+
+    buttons.append([KeyboardButton(text='⬅️ Назад')])
+    markup = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
     return markup

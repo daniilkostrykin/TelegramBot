@@ -7,6 +7,7 @@ import logging
 import os
 from src.handlers.mistral import register_mistral_handlers
 from src.handlers.gemini import register_gemini_handlers
+from src.handlers.ai_io_net import register_ai_io_net_handlers
 import google.generativeai as genai
 from g4f.client import Client
 from deep_translator import GoogleTranslator
@@ -131,6 +132,9 @@ async def setup_handlers(bot):
 
     register_deepseek_handlers(dp)
 
+    # Регистрируем обработчики ai-io-net
+    register_ai_io_net_handlers(dp)
+
     # Настраиваем административные обработчики
     await setup_admin_handlers(dp, db_manager, dialog_sessions, active_generations)
 
@@ -184,7 +188,9 @@ async def setup_handlers(bot):
             'photo': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'midjourney_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
             'mistral_dialog': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
-            'deepseek_dialog': ('main_menu', get_main_keyboard(), "Возврат в главное меню.")
+            'deepseek_dialog': ('main_menu', get_main_keyboard(), "Возврат в главное меню."),
+            'ai_io_net_category': ('ai_selection', get_ai_selection_keyboard(), "Возврат в меню выбора AI."),
+            'ai_io_net_chat': ('ai_io_net_category', get_ai_io_net_keyboard(), "Возврат к выбору категории моделей.")
         }
 
         if current_state in state_transitions:
@@ -233,7 +239,7 @@ async def setup_handlers(bot):
         )
         await save_user_state(message.chat.id, 'ai_selection')
 
-    @dp.message(F.text.in_(['ChatGPT', 'Gemini', 'Microsoft Copilot', 'Github Copilot', 'Mistral AI', 'Qwen', 'DeepSeek']))
+    @dp.message(F.text.in_(['ChatGPT', 'Gemini', 'Microsoft Copilot', 'Github Copilot', 'Mistral AI', 'Qwen', 'DeepSeek', 'AI.IO.NET']))
     async def handle_ai_choice(message: types.Message, state: FSMContext):
         chat_id = message.chat.id
 
@@ -242,12 +248,18 @@ async def setup_handlers(bot):
             dialog_sessions.pop(chat_id, None)
         await state.clear()
 
-        if message.text == 'Gemini':
+        if message.text == 'AI.IO.NET':
+            await message.answer(
+                "Вы выбрали AI.IO.NET. Выберите категорию моделей:",
+                reply_markup=get_ai_io_net_keyboard()
+            )
+            await state.set_state(DialogStates.ai_io_net_category)
+        elif message.text == 'Gemini':
             await message.answer(
                 "Вы выбрали Gemini.",
                 reply_markup=get_gemini_model_keyboard()
             )
-            await save_user_state(state, 'gemini_model_selection')
+            await state.set_state('gemini_model_selection')
             await state.set_state(DialogStates.waiting_for_model_selection)
 
         elif message.text == 'Mistral AI':

@@ -26,6 +26,9 @@ class DialogStates(StatesGroup):
     waiting_for_photo = State()
     waiting_for_midjourney = State()
     deepseek_dialog = State()
+    # Новые состояния для ai-io-net
+    ai_io_net_category = State()
+    ai_io_net_chat = State()
 
 
 class DialogSessionManager:
