@@ -1,4 +1,3 @@
-
 import re
 from aiogram import types
 from aiogram.enums import ParseMode
@@ -94,8 +93,12 @@ def to_markdown(text: str) -> str:
     return text
 
 
-async def safe_send_message(message: types.Message, text: str):
+async def safe_send_message(message: types.Message, text: str) -> types.Message | None:
+    """
+    Базовая версия функции safe_send_message с поддержкой форматирования
+    """
     MAX_LENGTH = 3500
+    last_message = None
     try:
         parts = process_code_block(text)
         current_message = ""
@@ -107,7 +110,7 @@ async def safe_send_message(message: types.Message, text: str):
             if is_code:
                 if current_message:
                     try:
-                        await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                        last_message = await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
                     except Exception as e:
                         if "can't parse entities: Can't find end of Bold" in str(e):
                             # Если ошибка связана с незакрытым жирным текстом, добавляем закрывающую звездочку
@@ -115,9 +118,9 @@ async def safe_send_message(message: types.Message, text: str):
                             # Если нечетное количество звездочек
                             if fixed_text.count('*') % 2 != 0:
                                 fixed_text += '*'
-                            await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
+                            last_message = await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
                         else:
-                            await message.answer(current_message)
+                            last_message = await message.answer(current_message)
                     current_message = ""
 
                 # Разбиваем длинный код на части
@@ -125,39 +128,38 @@ async def safe_send_message(message: types.Message, text: str):
                               for i in range(0, len(content), MAX_LENGTH)]
                 for code_part in code_parts:
                     try:
-                        await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                        last_message = await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
                     except Exception as e:
                         if "can't parse entities: Can't find end of PreCode entity" in str(e):
                             # Если ошибка связана с незакрытым блоком кода, добавляем закрывающие символы
                             fixed_code = code_part
                             if not fixed_code.endswith('\n'):
                                 fixed_code += '\n'
-                            await message.answer(f"```\n{fixed_code}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                            last_message = await message.answer(f"```\n{fixed_code}\n```", parse_mode=ParseMode.MARKDOWN_V2)
                         else:
-                            await message.answer(code_part)
+                            last_message = await message.answer(code_part)
             else:
                 formatted_text = to_markdown(content)
 
                 if len(current_message) + len(formatted_text) > MAX_LENGTH:
                     try:
-                        await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                        last_message = await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
                     except Exception as e:
                         if "can't parse entities: Can't find end of Bold" in str(e):
-                            # Если ошибка связана с незакрытым жирным текстом, добавляем закрывающую звездочку
                             fixed_text = current_message
                             # Если нечетное количество звездочек
                             if fixed_text.count('*') % 2 != 0:
                                 fixed_text += '*'
-                            await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
+                            last_message = await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
                         else:
-                            await message.answer(current_message)
+                            last_message = await message.answer(current_message)
                     current_message = formatted_text
                 else:
                     current_message += formatted_text
 
         if current_message:
             try:
-                await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                last_message = await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
             except Exception as e:
                 if "can't parse entities: Can't find end of Bold" in str(e):
                     # Если ошибка связана с незакрытым жирным текстом, добавляем закрывающую звездочку
@@ -165,14 +167,115 @@ async def safe_send_message(message: types.Message, text: str):
                     # Если нечетное количество звездочек
                     if fixed_text.count('*') % 2 != 0:
                         fixed_text += '*'
-                    await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
+                    last_message = await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
                 else:
-                    await message.answer(current_message)
+                    last_message = await message.answer(current_message)
 
     except Exception as e:
         print(f"Ошибка форматирования: {e}")
         # Если произошла ошибка форматирования, разбиваем текст на части и отправляем без форматирования
         text_parts = [text[i:i + MAX_LENGTH]
                       for i in range(0, len(text), MAX_LENGTH)]
-        for part in text_parts:
-            await message.answer(part)
+        for i, part in enumerate(text_parts):
+            last_message = await message.answer(part)
+
+    return last_message
+
+
+async def safe_send_message_with_keyboard(message: types.Message, text: str, reply_markup=None) -> types.Message | None:
+    """
+    Расширенная версия safe_send_message с поддержкой клавиатуры
+    Клавиатура добавляется только к последнему сообщению
+    """
+    if not text:
+        return None
+
+    MAX_LENGTH = 3500
+    last_message = None
+    try:
+        parts = process_code_block(text)
+        current_message = ""
+
+        for content, is_code in parts:
+            if not content.strip():
+                continue
+
+            if is_code:
+                if current_message:
+                    try:
+                        last_message = await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                    except Exception as e:
+                        if "can't parse entities: Can't find end of Bold" in str(e):
+                            fixed_text = current_message
+                            if fixed_text.count('*') % 2 != 0:
+                                fixed_text += '*'
+                            last_message = await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
+                        else:
+                            last_message = await message.answer(current_message)
+                    current_message = ""
+
+                code_parts = [content[i:i + MAX_LENGTH]
+                              for i in range(0, len(content), MAX_LENGTH)]
+                for code_part in code_parts:
+                    try:
+                        last_message = await message.answer(f"```\n{code_part}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                    except Exception as e:
+                        if "can't parse entities: Can't find end of PreCode entity" in str(e):
+                            fixed_code = code_part
+                            if not fixed_code.endswith('\n'):
+                                fixed_code += '\n'
+                            last_message = await message.answer(f"```\n{fixed_code}\n```", parse_mode=ParseMode.MARKDOWN_V2)
+                        else:
+                            last_message = await message.answer(code_part)
+            else:
+                formatted_text = to_markdown(content)
+
+                if len(current_message) + len(formatted_text) > MAX_LENGTH:
+                    try:
+                        last_message = await message.answer(current_message, parse_mode=ParseMode.MARKDOWN_V2)
+                    except Exception as e:
+                        if "can't parse entities: Can't find end of Bold" in str(e):
+                            fixed_text = current_message
+                            if fixed_text.count('*') % 2 != 0:
+                                fixed_text += '*'
+                            last_message = await message.answer(fixed_text, parse_mode=ParseMode.MARKDOWN_V2)
+                        else:
+                            last_message = await message.answer(current_message)
+                    current_message = formatted_text
+                else:
+                    current_message += formatted_text
+
+        if current_message:
+            try:
+                # Отправляем последнее сообщение с клавиатурой, если она есть
+                last_message = await message.answer(
+                    current_message,
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                if "can't parse entities: Can't find end of Bold" in str(e):
+                    fixed_text = current_message
+                    if fixed_text.count('*') % 2 != 0:
+                        fixed_text += '*'
+                    last_message = await message.answer(
+                        fixed_text,
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=reply_markup
+                    )
+                else:
+                    last_message = await message.answer(
+                        current_message,
+                        reply_markup=reply_markup
+                    )
+
+    except Exception as e:
+        print(f"Ошибка форматирования: {e}")
+        text_parts = [text[i:i + MAX_LENGTH]
+                      for i in range(0, len(text), MAX_LENGTH)]
+        for i, part in enumerate(text_parts):
+            # Добавляем клавиатуру только к последнему сообщению
+            current_markup = reply_markup if i == len(text_parts) - 1 else None
+            last_message = await message.answer(part, reply_markup=current_markup)
+
+    return last_message
