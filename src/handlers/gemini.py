@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 # Конфигурация Gemini
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
+# Локальное хранилище диалогов
+dialog_sessions = {}
+
 
 async def save_user_state(state_or_chat_id, new_state: str):
     """Обертка для сохранения состояния пользователя через менеджер состояний"""
@@ -28,7 +31,12 @@ async def save_user_state(state_or_chat_id, new_state: str):
 async def handle_gemini_command(message: Message, state: FSMContext):
     """Запуск Gemini по команде /gemini"""
     chat_id = message.chat.id
-    dialog_manager.clear_dialog_history(chat_id)
+
+    # Очищаем историю диалога для текущего пользователя
+    keys_to_delete = [(cid, ai) for (cid, ai)
+                      in dialog_sessions.keys() if cid == chat_id]
+    for key in keys_to_delete:
+        dialog_sessions.pop(key, None)
 
     model_name = 'gemini-2.0-flash-exp'
     await state.update_data(model_name=model_name)
@@ -42,7 +50,12 @@ async def handle_gemini_command(message: Message, state: FSMContext):
 async def handle_gemini_choice(message: Message, state: FSMContext):
     """Обработчик выбора Gemini из меню"""
     chat_id = message.chat.id
-    dialog_manager.clear_dialog_history(chat_id)
+
+    # Очищаем историю диалога для текущего пользователя
+    keys_to_delete = [(cid, ai) for (cid, ai)
+                      in dialog_sessions.keys() if cid == chat_id]
+    for key in keys_to_delete:
+        dialog_sessions.pop(key, None)
 
     await message.answer(
         "Вы выбрали Gemini.",
@@ -56,11 +69,16 @@ async def handle_model_selection(message: Message, state: FSMContext):
     chat_id = message.chat.id
 
     if message.text == '⬅️ Назад':
+        # Очищаем историю диалога для текущего пользователя
+        keys_to_delete = [(cid, ai) for (cid, ai)
+                          in dialog_sessions.keys() if cid == chat_id]
+        for key in keys_to_delete:
+            dialog_sessions.pop(key, None)
+
         await message.answer(
             "Возврат в меню выбора AI.",
             reply_markup=get_ai_selection_keyboard()
         )
-        dialog_manager.clear_dialog_history(chat_id)
         await state.clear()
         return
 
@@ -77,6 +95,12 @@ async def handle_model_selection(message: Message, state: FSMContext):
         await message.answer("Неверный выбор модели. Попробуйте снова.")
         return
 
+    # Очищаем историю диалога для текущего пользователя
+    keys_to_delete = [(cid, ai) for (cid, ai)
+                      in dialog_sessions.keys() if cid == chat_id]
+    for key in keys_to_delete:
+        dialog_sessions.pop(key, None)
+
     await state.update_data(model_name=model_name)
     await message.answer(
         f"Вы выбрали: {model_name}. Начните диалог.",
@@ -90,20 +114,32 @@ async def handle_dialog(message: Message, state: FSMContext):
     chat_id = message.chat.id
 
     if message.text == '⏹️ Завершить диалог':
+        # Удаляем все диалоги пользователя из локального кэша
+        keys_to_delete = [(cid, ai) for (cid, ai)
+                          in dialog_sessions.keys() if cid == chat_id]
+        for key in keys_to_delete:
+            dialog_sessions.pop(key, None)
+
         await message.answer(
             "Диалог завершен.",
             reply_markup=get_ai_selection_keyboard()
         )
-        dialog_manager.clear_dialog_history(chat_id)
+        await save_user_state(state, 'ai_selection')
         await state.clear()
         return
 
     if message.text == '⬅️ Назад':
+        # Удаляем все диалоги пользователя из локального кэша
+        keys_to_delete = [(cid, ai) for (cid, ai)
+                          in dialog_sessions.keys() if cid == chat_id]
+        for key in keys_to_delete:
+            dialog_sessions.pop(key, None)
+
         await message.answer(
             "Возврат в меню выбора AI.",
             reply_markup=get_ai_selection_keyboard()
         )
-        dialog_manager.clear_dialog_history(chat_id)
+        await save_user_state(state, 'ai_selection')
         await state.clear()
         return
 
@@ -114,17 +150,29 @@ async def handle_dialog(message: Message, state: FSMContext):
     await db_manager.save_dialog_message(chat_id, model_name, "user", query)
 
     sent_message = await message.answer("Генерация ответа...")
-    dialog_manager.set_active_generation(chat_id, True)
 
     try:
         model = genai.GenerativeModel(model_name)
-        messages = await db_manager.get_dialog_history(chat_id, model_name)
-        print(
-            f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
+        messages = dialog_sessions.get((chat_id, model_name), [])
+        print(f"[LOG] Загруженная история диалога для {chat_id}: {messages}")
+
+        # Добавляем текущее сообщение пользователя в правильном формате
+        messages.append({
+            "role": "user",
+            "parts": [{"text": query}]
+        })
+        dialog_sessions[(chat_id, model_name)] = messages
 
         response = await asyncio.to_thread(model.generate_content, messages)
         response_text = response.text
         await db_manager.save_dialog_message(chat_id, model_name, "model", response_text)
+
+        # Сохраняем ответ в локальный кэш в правильном формате
+        messages.append({
+            "role": "model",
+            "parts": [{"text": response_text}]
+        })
+        dialog_sessions[(chat_id, model_name)] = messages
 
         await safe_send_message(message, response_text)
         await sent_message.delete()
