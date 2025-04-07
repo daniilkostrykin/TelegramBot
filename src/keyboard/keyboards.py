@@ -120,15 +120,27 @@ def get_g4f_model_keyboard():
 
 
 def get_gemini_model_keyboard():
-    keyboard = [
-        [KeyboardButton(text='Gemini 2.0 Experimental')],
-        [KeyboardButton(text='Gemini 1.5 Pro'), KeyboardButton(
-            text='Gemini 1.5 Flash'), KeyboardButton(text='Gemini 2.0 Flash')],
-        [KeyboardButton(text='Gemini 2.0 Pro Experimental 02-05'), KeyboardButton(
-            text='Gemini 2.0 Flash Thinking Experimental 01-21'), KeyboardButton(text='Gemini 2.0 Flash-Lite Preview 02-05')],
-        [KeyboardButton(text='⬅️ Назад')]
-    ]
-    markup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    from src.handlers.gemini import model_mapping
+
+    # Создаем список кнопок из model_mapping
+    buttons = []
+
+    # Первая кнопка на всю строку
+    first_model = list(model_mapping.keys())[0]
+    buttons.append([KeyboardButton(text=first_model)])
+
+    # Остальные модели по три в ряд
+    remaining_models = list(model_mapping.keys())[1:]
+    for i in range(0, len(remaining_models), 3):
+        row = []
+        for model in remaining_models[i:i+3]:
+            row.append(KeyboardButton(text=model))
+        buttons.append(row)
+
+    # Добавляем кнопку "Назад"
+    buttons.append([KeyboardButton(text='⬅️ Назад')])
+
+    markup = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
     return markup
 
 

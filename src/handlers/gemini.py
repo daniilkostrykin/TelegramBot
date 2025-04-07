@@ -22,6 +22,17 @@ genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 # Локальное хранилище диалогов
 dialog_sessions = {}
 
+# Маппинг моделей Gemini
+model_mapping = {
+    'Gemini 2.5 Pro Exp 03-25': 'gemini-2.5-pro-exp-03-25',
+    'Gemini 2.0 Exp': 'gemini-2.0-flash-exp',
+    'Gemini 2.0 Exp Image Generation': 'gemini-2.0-flash-exp-image-generation',
+    'Gemini 1.5 Pro': 'gemini-1.5-pro',
+    'Gemini 1.5 Flash': 'gemini-1.5-flash',
+    'Gemini 2.0 Pro Exp 02-05': 'gemini-2.0-pro-exp-02-05',
+    'Gemini 2.0 Flash': 'gemini-2.0-flash'
+}
+
 
 async def save_user_state(state_or_chat_id, new_state: str):
     """Обертка для сохранения состояния пользователя через менеджер состояний"""
@@ -81,14 +92,6 @@ async def handle_model_selection(message: Message, state: FSMContext):
         )
         await state.clear()
         return
-
-    model_mapping = {
-        'Gemini 2.0 Experimental': 'gemini-2.0-flash-exp',
-        'Gemini 1.5 Pro': 'gemini-1.5-pro',
-        'Gemini 1.5 Flash': 'gemini-1.5-flash',
-        'Gemini 2.0 Pro Experimental 02-05': 'gemini-2.0-pro-exp-02-05',
-        'Gemini 2.0 Flash': 'gemini-2.0-flash'
-    }
 
     model_name = model_mapping.get(message.text)
     if not model_name:
