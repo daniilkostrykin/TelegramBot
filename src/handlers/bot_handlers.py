@@ -114,6 +114,23 @@ g4f_dialog_sessions = {}
 active_generations = {}  # Словарь для отслеживания генерации сообщений
 user_states = {}  # {chat_id: [state1, state2, ...]}
 
+# Словарь для хранения активных спам-задач
+active_spam_tasks = {}
+
+
+async def send_time_message(chat_id: int, bot: Bot):
+    """Отправляет сообщение с текущим временем и датой"""
+    from datetime import datetime
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    await bot.send_message(chat_id=chat_id, text=f"Текущее время: {current_time}")
+
+
+async def spam_task(chat_id: int, bot: Bot):
+    """Задача для отправки времени каждую минуту"""
+    while chat_id in active_spam_tasks:
+        await send_time_message(chat_id, bot)
+        await asyncio.sleep(60)  # Ждем 60 секунд
+
 
 async def setup_handlers(bot):
     # Отправляем уведомление администратору при запуске
@@ -529,3 +546,27 @@ async def setup_handlers(bot):
             )
         else:
             await message.answer("Пожалуйста, выберите сервис из предложенных вариантов.")
+
+    @dp.message(Command('spam'))
+    async def start_spam(message: types.Message):
+        chat_id = message.chat.id
+        if chat_id in active_spam_tasks:
+            await message.answer("Спам уже запущен!")
+            return
+
+        # Создаем задачу для спама
+        task = asyncio.create_task(spam_task(chat_id, bot))
+        active_spam_tasks[chat_id] = task
+        await message.answer("Спам запущен! Каждую минуту будет отправляться текущее время и дата.")
+
+    @dp.message(Command('stop'))
+    async def stop_spam(message: types.Message):
+        chat_id = message.chat.id
+        if chat_id not in active_spam_tasks:
+            await message.answer("Спам не был запущен!")
+            return
+
+        # Отменяем задачу
+        task = active_spam_tasks.pop(chat_id)
+        task.cancel()
+        await message.answer("Спам остановлен!")

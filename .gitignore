@@ -34,3 +34,5 @@ wheels/
 other/
 .ipynb_checkpoints/
 assets/
+*.zip
+env.txt
