@@ -5,12 +5,14 @@ import nest_asyncio
 import streamlit as st
 from aiogram import Bot
 from aiogram.methods import DeleteWebhook
+
 from src.handlers.bot_handlers import setup_handlers, dp
 from dotenv import load_dotenv
 import os
 
 # Загрузка переменных окружения
 load_dotenv()
+
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 # Настройка логирования

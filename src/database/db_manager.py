@@ -17,7 +17,24 @@ class DatabaseManager:
         try:
             self._connect()
             self.is_connected = True
-
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS dialog_sessions (
+                    chat_id BIGINT,
+                    ai_name TEXT,
+                    messages JSONB,
+                    PRIMARY KEY (chat_id, ai_name)
+                );
+            """)
+            # Создаем таблицу для хранения всех пользователей
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+            chat_id BIGINT PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
             # Создаем таблицу только если есть подключение
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS last_messages (
