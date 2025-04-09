@@ -9,3 +9,5 @@ python-dateutil==2.9.0.post0
 mistralai
 Pillow==10.2.0
 python-dotenv
+nest_asyncio
+streamlit
