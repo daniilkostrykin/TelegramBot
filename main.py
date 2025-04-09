@@ -30,12 +30,13 @@ async def start_bot():
     try:
         await bot(DeleteWebhook(drop_pending_updates=True))
         await setup_handlers(bot)
-        await dp.start_polling(bot)
+        await dp.start_polling(bot, handle_signals=False)  # 💥 вот это главное
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
         if "database" not in str(e).lower():
             raise
         logger.info("Продолжаем работу без базы данных")
+
 
 # UI Streamlit
 st.title("🤖 Telegram Bot Controller")
