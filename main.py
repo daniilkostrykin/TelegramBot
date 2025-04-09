@@ -46,7 +46,7 @@ if "bot_running" not in st.session_state:
 if not st.session_state.bot_running:
     if st.button("🚀 Запустить бота"):
         st.session_state.bot_running = True
-        asyncio.create_task(start_bot())
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(start_bot())
         st.success("Бот запущен!")
-else:
-    st.info("Бот уже работает.")
+
