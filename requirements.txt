@@ -3,7 +3,7 @@ aiohttp==3.11.12
 deep-translator==1.11.1
 g4f==0.4.7.3
 google-generativeai==0.4.1
-psycopg2==2.9.10
+psycopg2-binary==2.9.10
 requests==2.31.0
 python-dateutil==2.9.0.post0
 mistralai
