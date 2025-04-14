@@ -126,10 +126,10 @@ async def send_time_message(chat_id: int, bot: Bot):
 
 
 async def spam_task(chat_id: int, bot: Bot):
-    """Задача для отправки времени каждую минуту"""
+    """Задача для отправки времени каждые 10 минут"""
     while chat_id in active_spam_tasks:
         await send_time_message(chat_id, bot)
-        await asyncio.sleep(60)  # Ждем 60 секунд
+        await asyncio.sleep(600)  # Ждем 600 секунд (10 минут)
 
 
 async def setup_handlers(bot):
@@ -557,7 +557,7 @@ async def setup_handlers(bot):
         # Создаем задачу для спама
         task = asyncio.create_task(spam_task(chat_id, bot))
         active_spam_tasks[chat_id] = task
-        await message.answer("Спам запущен! Каждую минуту будет отправляться текущее время и дата.")
+        await message.answer("Спам запущен! Каждые 10 минут будет отправляться текущее время и дата.")
 
     @dp.message(Command('stop'))
     async def stop_spam(message: types.Message):

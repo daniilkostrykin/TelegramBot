@@ -36,3 +36,4 @@ other/
 assets/
 *.zip
 env.txt
+to_env_txt.py
