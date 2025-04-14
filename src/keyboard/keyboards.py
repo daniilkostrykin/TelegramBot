@@ -51,11 +51,6 @@ def get_text_text_button():
          KeyboardButton(text="Mistral AI"), KeyboardButton(text="Qwen")],
         [KeyboardButton(text="AI.IO.NET")],
         [KeyboardButton(text="DeepSeek")],
-        [KeyboardButton(text="ChatGPT🌐", web_app=WebAppInfo(url="https://chatgpt.com/")),
-         KeyboardButton(text="Microsoft Copilot🌐", web_app=WebAppInfo(
-             url="https://copilot.microsoft.com/"))],
-        [KeyboardButton(text="Github Copilot🌐", web_app=WebAppInfo(
-            url="https://github.com/copilot"))],
         [KeyboardButton(text="⬅️ Назад")]
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)

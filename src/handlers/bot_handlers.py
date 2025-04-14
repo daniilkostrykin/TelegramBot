@@ -119,10 +119,13 @@ active_spam_tasks = {}
 
 
 async def send_time_message(chat_id: int, bot: Bot):
-    """Отправляет сообщение с текущим временем и датой"""
-    from datetime import datetime
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    await bot.send_message(chat_id=chat_id, text=f"Текущее время: {current_time}")
+    """Отправляет сообщение с текущим временем и датой в московском часовом поясе"""
+    from datetime import datetime, timedelta
+    # Получаем текущее время и добавляем смещение UTC+3
+    current_time = datetime.now() + timedelta(hours=3)
+    # Форматируем время в российском формате
+    formatted_time = current_time.strftime("%d.%m.%Y %H:%M:%S")
+    await bot.send_message(chat_id=chat_id, text=f"Текущее время (МСК): {formatted_time}")
 
 
 async def spam_task(chat_id: int, bot: Bot):
